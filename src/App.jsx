@@ -37,6 +37,49 @@ const buildInitialStopStatuses = (routeItems) => routeItems.reduce((acc, item, i
   return acc;
 }, {});
 const pluralize = (count, singular, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`;
+const normalizeAddressKey = (value) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]/g, '');
+const distanceKm = (c1, c2) => {
+  if (!c1 || !c2) return Infinity;
+  const R = 6371;
+  const dLat = (c2.lat - c1.lat) * Math.PI / 180;
+  const dLon = (c2.lon - c1.lon) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const cleanOptimizationItems = (routeItems) => {
+  if (!Array.isArray(routeItems) || routeItems.length <= 2) return { items: routeItems || [], removedDuplicates: 0, removedOutliers: 0 };
+
+  const uniqueMap = new Map();
+  routeItems.forEach((item, idx) => {
+    const lat = Number(item?.coords?.lat);
+    const lon = Number(item?.coords?.lon);
+    const coordsKey = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(5)}:${lon.toFixed(5)}` : 'noc';
+    const key = `${normalizeAddressKey(item?.address)}|${coordsKey}`;
+    if (!uniqueMap.has(key) || idx === 0) uniqueMap.set(key, item);
+  });
+  const deduped = [routeItems[0], ...Array.from(uniqueMap.values()).filter((item) => String(item.id) !== String(routeItems[0].id))];
+  const removedDuplicates = Math.max(0, routeItems.length - deduped.length);
+
+  const latList = deduped.slice(1).map((item) => Number(item?.coords?.lat)).filter(Number.isFinite);
+  const lonList = deduped.slice(1).map((item) => Number(item?.coords?.lon)).filter(Number.isFinite);
+  if (latList.length < 3 || lonList.length < 3) return { items: deduped, removedDuplicates, removedOutliers: 0 };
+  const center = {
+    lat: latList.reduce((acc, value) => acc + value, 0) / latList.length,
+    lon: lonList.reduce((acc, value) => acc + value, 0) / lonList.length
+  };
+  const dists = deduped.slice(1).map((item) => distanceKm(center, item.coords)).filter(Number.isFinite).sort((a, b) => a - b);
+  const p90 = dists[Math.floor(dists.length * 0.9)] || 0;
+  const maxAllowed = Math.max(45, p90 * 3);
+  const filtered = [deduped[0], ...deduped.slice(1).filter((item) => distanceKm(center, item.coords) <= maxAllowed)];
+  const removedOutliers = Math.max(0, deduped.length - filtered.length);
+  if (filtered.length < 3) return { items: deduped, removedDuplicates, removedOutliers: 0 };
+  return { items: filtered, removedDuplicates, removedOutliers };
+};
 
 function App() {
   const fuelPrice = 5.8;
@@ -70,6 +113,7 @@ function App() {
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
   const [deliveryCountMode, setDeliveryCountMode] = useState('stops');
   const [operationMode, setOperationMode] = useState(false);
+  const [autoReoptimize, setAutoReoptimize] = useState(true);
   const [driverDetailMode, setDriverDetailMode] = useState(() => {
     if (typeof window === 'undefined') return 'detailed';
     try {
@@ -276,7 +320,7 @@ function App() {
         throw new Error('Arquivo sem dados válidos.');
       }
       setItems(data);
-      setStartPointId(data[0]?.id ?? null);
+      setStartPointId(null);
       setStopStatuses({});
       setShowRouteSummary(false);
       setShowStopList(false);
@@ -302,10 +346,15 @@ function App() {
         const geocodeProgress = t > 0 ? Math.round((c / t) * 80) : 0;
         setProgress(Math.max(0, Math.min(80, geocodeProgress)));
       });
-      const validItems = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
-      if (!validItems.length) {
+      const validItemsRaw = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
+      if (!validItemsRaw.length) {
         throw new Error('Não foi possível localizar os endereços da planilha.');
       }
+      const cleaned = cleanOptimizationItems(validItemsRaw);
+      const validItems = cleaned.items;
+      if (cleaned.removedDuplicates > 0) showToast(`${cleaned.removedDuplicates} duplicidade(s) removida(s).`, 'info');
+      if (cleaned.removedOutliers > 0) showToast(`${cleaned.removedOutliers} ponto(s) distante(s) removido(s) por consistência.`, 'info');
+      if (validItems.length < 2) throw new Error('Não há pontos suficientes para otimizar após validação.');
 
       setStatus('optimizing');
       setProgress((prev) => Math.max(prev, 82));
@@ -330,7 +379,7 @@ function App() {
         const startGroupIndex = groups.findIndex((group) => group.items.some((item) => String(item.id) === String(startPointId)));
         const stopResult = await optimizeRoute(stopItems, {
           roundTrip,
-          startIndex: startGroupIndex >= 0 ? startGroupIndex : 0,
+          startIndex: startGroupIndex >= 0 ? startGroupIndex : -1,
           optimizeBy,
           routeProfile
         });
@@ -353,7 +402,7 @@ function App() {
       } else {
         res = await optimizeRoute(validItems, {
           roundTrip,
-          startIndex: sIdx >= 0 ? sIdx : 0,
+          startIndex: sIdx >= 0 ? sIdx : -1,
           optimizeBy,
           routeProfile
         });
@@ -396,10 +445,35 @@ function App() {
       showToast('Sem internet. Ação salva para enviar depois.', 'info');
       return;
     }
-    showToast(
-      s === 'done' ? 'Entrega marcada.' : 'Marcado como não entregue.',
-      s === 'done' ? 'success' : 'error'
-    );
+    const feedbackMessage = s === 'done' ? 'Entrega marcada.' : 'Marcado como não entregue.';
+    showToast(feedbackMessage, s === 'done' ? 'success' : 'error');
+    if (!autoReoptimize || status !== 'ready' || idx < 1) return;
+    const nextStatuses = { ...stopStatuses, [stopId]: s };
+    const fixedPart = items.filter((item, itemIdx) => itemIdx <= idx || (nextStatuses[String(item.id)] || 'pending') !== 'pending');
+    const pendingTail = items.filter((item, itemIdx) => itemIdx > idx && (nextStatuses[String(item.id)] || 'pending') === 'pending');
+    if (pendingTail.length < 2) return;
+    setTimeout(async () => {
+      try {
+        const optimizedTail = await optimizeRoute(pendingTail, {
+          roundTrip: false,
+          startIndex: 0,
+          optimizeBy,
+          routeProfile
+        });
+        const nextItems = [...fixedPart, ...optimizedTail.orderedItems];
+        setItems(nextItems);
+        setRouteInfo((prev) => ({
+          ...prev,
+          geometry: null,
+          meta: {
+            ...(prev?.meta || {}),
+            liveReoptimized: true
+          }
+        }));
+      } catch {
+        // noop
+      }
+    }, 100);
   };
   const markStopByItemIds = (itemIds, s) => {
     if (!Array.isArray(itemIds) || itemIds.length === 0) return;
@@ -724,6 +798,7 @@ function App() {
                               <div className="config-option">
                                 <span className="config-label">Iniciar em</span>
                                 <select value={startPointId ?? ''} onChange={e => setStartPointId(e.target.value)}>
+                                  <option value="">Automático (mais eficiente)</option>
                                   {items.map((it, i) => <option key={it.id} value={it.id}>{i + 1}. {it.address}</option>)}
                                 </select>
                               </div>
@@ -733,6 +808,13 @@ function App() {
                                   <option value="neutral">Padrão</option>
                                   <option value="shopee">Shopee</option>
                                   <option value="mercado_livre">Mercado Livre</option>
+                                </select>
+                              </div>
+                              <div className="config-option">
+                                <span className="config-label">Reotimização contínua</span>
+                                <select value={autoReoptimize ? 'on' : 'off'} onChange={(e) => setAutoReoptimize(e.target.value === 'on')}>
+                                  <option value="on">Ativada (recomendada)</option>
+                                  <option value="off">Desativada</option>
                                 </select>
                               </div>
                             </>
@@ -908,7 +990,7 @@ function App() {
                     setRoundTrip(Boolean(l.roundTrip));
                     setOptimizeBy(l.optimizeBy === 'duration' ? 'duration' : 'distance');
                     setRouteProfile(l.routeProfile === 'shopee' || l.routeProfile === 'mercado_livre' ? l.routeProfile : 'neutral');
-                    setStartPointId(l.startPointId ?? l.items?.[0]?.id ?? null);
+                    setStartPointId(l.startPointId ?? null);
                     setDeliveryCountMode(l.deliveryCountMode === 'packages' ? 'packages' : 'stops');
                     setStopStatuses(buildInitialStopStatuses(l.items || []));
                     setStatus(l.routeInfo ? 'ready' : 'idle');

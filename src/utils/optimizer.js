@@ -326,14 +326,19 @@ const getBestSequence = (items, startIndex, roundTrip) => {
 export const optimizeRoute = async (items, options = { roundTrip: false, startIndex: 0, optimizeBy: 'distance', routeProfile: 'neutral' }) => {
     if (items.length < 2) return { orderedItems: items, geometry: null, distance: 0, duration: 0 };
 
-    const startIdx = options.startIndex >= 0 && options.startIndex < items.length ? options.startIndex : 0;
+    const requestedStartIdx = Number.isInteger(options.startIndex) && options.startIndex >= 0 && options.startIndex < items.length
+        ? options.startIndex
+        : -1;
     const optimizeBy = options.optimizeBy === 'duration' ? 'duration' : 'distance';
     const routeProfile = resolveProfile(items, options.routeProfile || 'neutral');
     const advancedConstraints = hasAdvancedConstraints(items);
+    const roadTable = await getOSRMTableMatrix(items);
+    const startIdx = requestedStartIdx >= 0
+        ? requestedStartIdx
+        : selectAdaptiveStartIndex(items, optimizeBy, roadTable);
     const baselineOrder = buildBaselineOrder(items.length, startIdx);
     const baselineRoute = baselineOrder.map((idx) => items[idx]);
     const baselineMetrics = await getOSRMRoute(baselineRoute, options.roundTrip);
-    const roadTable = await getOSRMTableMatrix(items);
     const attachBaseline = (result) => ({
         ...result,
         optimizeBy,
@@ -344,26 +349,35 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
             duration: baselineMetrics.duration
         }
     });
+    const candidates = [];
 
     // Exact best route on real road costs for smaller inputs.
     // With <=11 points, this is still practical and guarantees optimality.
     if (items.length <= 11 && !advancedConstraints && roadTable) {
         const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip, optimizeBy, roadTable);
         if (exactRoad) {
-            return attachBaseline(exactRoad);
+            candidates.push(attachBaseline(exactRoad));
         }
     }
 
     // Better road heuristic for larger inputs using OSRM matrix + 2-opt.
     const roadHeuristic = await getRoadHeuristicOptimized(items, startIdx, options.roundTrip, optimizeBy, routeProfile, roadTable);
     if (roadHeuristic) {
-        return attachBaseline(roadHeuristic);
+        candidates.push(attachBaseline(roadHeuristic));
+    }
+
+    // Cluster-aware candidate for larger inputs, then select by objective.
+    if (items.length >= 18) {
+        const clustered = await getClusterHybridOptimized(items, startIdx, options.roundTrip);
+        if (clustered) {
+            candidates.push(attachBaseline(clustered));
+        }
     }
 
     // Fallback road optimizer for larger inputs.
     const tripOptimized = await getOSRMTripOptimized(items, startIdx, options.roundTrip);
     if (tripOptimized) {
-        return attachBaseline({
+        candidates.push(attachBaseline({
             ...tripOptimized,
             meta: {
                 solver: 'osrm-trip',
@@ -371,15 +385,14 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
                 costBasis: optimizeBy,
                 profile: routeProfile
             }
-        });
+        }));
     }
 
-    // Fallback: local optimizer + OSRM route geometry.
+    // Guaranteed fallback: local optimizer + OSRM route geometry.
     const indexRoute = getBestSequence(items, startIdx, options.roundTrip);
     const route = indexRoute.map((idx) => items[idx]);
     const pathData = await getOSRMRoute(route, options.roundTrip);
-
-    return attachBaseline({
+    candidates.push(attachBaseline({
         orderedItems: route,
         geometry: pathData.geometry,
         distance: pathData.distance,
@@ -390,7 +403,9 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
             costBasis: optimizeBy,
             profile: routeProfile
         }
-    });
+    }));
+
+    return chooseBestRouteCandidate(candidates, optimizeBy);
 };
 
 const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance', table = null) => {
@@ -452,6 +467,26 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
         }
     }
 
+    // Randomized perturbation passes over current best route to escape local minima.
+    if (bestIndexRoute) {
+        for (let i = 0; i < 16; i++) {
+            const perturbed = randomRoutePerturbation(bestIndexRoute);
+            const improved = twoOptImprove(perturbed, costMatrix, roundTrip);
+            const score = routeScoreWithConstraints(improved, {
+                costMatrix,
+                durationMatrix,
+                items,
+                roundTrip,
+                startIndex,
+                profile: routeProfile
+            });
+            if (score < bestScore) {
+                bestScore = score;
+                bestIndexRoute = improved;
+            }
+        }
+    }
+
     if (!bestIndexRoute) return null;
 
     const route = bestIndexRoute.map((idx) => items[idx]);
@@ -475,11 +510,140 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
     };
 };
 
+const randomRoutePerturbation = (route) => {
+    if (!Array.isArray(route) || route.length < 6) return [...(route || [])];
+    const next = [...route];
+    const n = next.length;
+    const swapA = 1 + Math.floor(Math.random() * (n - 1));
+    const swapB = 1 + Math.floor(Math.random() * (n - 1));
+    [next[swapA], next[swapB]] = [next[swapB], next[swapA]];
+    const cutStart = 1 + Math.floor(Math.random() * Math.max(1, n - 3));
+    const cutEnd = Math.min(n - 1, cutStart + 1 + Math.floor(Math.random() * 3));
+    const chunk = next.slice(cutStart, cutEnd).reverse();
+    next.splice(cutStart, chunk.length, ...chunk);
+    return next;
+};
+
+const getClusterHybridOptimized = async (items, startIndex, roundTrip = false) => {
+    if (items.length < 8) return null;
+    const startItem = items[startIndex];
+    const nonStart = items.map((item, idx) => ({ item, idx })).filter(({ idx }) => idx !== startIndex);
+    if (nonStart.length === 0) return null;
+
+    const precision = items.length > 60 ? 2 : 3;
+    const clusterMap = new Map();
+    nonStart.forEach(({ item, idx }) => {
+        const key = `${item.coords.lat.toFixed(precision)}:${item.coords.lon.toFixed(precision)}`;
+        const existing = clusterMap.get(key);
+        if (existing) {
+            existing.push({ item, idx });
+            return;
+        }
+        clusterMap.set(key, [{ item, idx }]);
+    });
+    const clusters = Array.from(clusterMap.values());
+    const clusterCentroids = clusters.map((cluster) => {
+        const lat = cluster.reduce((acc, entry) => acc + entry.item.coords.lat, 0) / cluster.length;
+        const lon = cluster.reduce((acc, entry) => acc + entry.item.coords.lon, 0) / cluster.length;
+        return { lat, lon };
+    });
+
+    const remainingClusterIdx = new Set(clusters.map((_, idx) => idx));
+    let currentPoint = startItem.coords;
+    const clusterVisitOrder = [];
+    while (remainingClusterIdx.size > 0) {
+        let best = null;
+        let bestDist = Infinity;
+        remainingClusterIdx.forEach((clusterIdx) => {
+            const d = getDistance(currentPoint, clusterCentroids[clusterIdx]);
+            if (d < bestDist) {
+                bestDist = d;
+                best = clusterIdx;
+            }
+        });
+        clusterVisitOrder.push(best);
+        remainingClusterIdx.delete(best);
+        currentPoint = clusterCentroids[best];
+    }
+
+    const orderedIndices = [startIndex];
+    let currentIdx = startIndex;
+    clusterVisitOrder.forEach((clusterIdx) => {
+        const unvisited = [...clusters[clusterIdx]];
+        while (unvisited.length > 0) {
+            let bestPos = -1;
+            let bestDist = Infinity;
+            for (let i = 0; i < unvisited.length; i++) {
+                const d = getDistance(items[currentIdx].coords, unvisited[i].item.coords);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestPos = i;
+                }
+            }
+            const [nextEntry] = unvisited.splice(bestPos, 1);
+            orderedIndices.push(nextEntry.idx);
+            currentIdx = nextEntry.idx;
+        }
+    });
+
+    const matrix = buildDistanceMatrix(items);
+    const improvedIndexRoute = twoOptImprove(orderedIndices, matrix, roundTrip);
+    const route = improvedIndexRoute.map((idx) => items[idx]);
+    const pathData = await getOSRMRoute(route, roundTrip);
+    return {
+        orderedItems: route,
+        geometry: pathData.geometry,
+        distance: pathData.distance,
+        duration: pathData.duration,
+        meta: {
+            solver: 'cluster-hybrid',
+            exact: false
+        }
+    };
+};
+
 const selectCostMatrix = (table, optimizeBy) => {
     if (optimizeBy === 'duration') {
         return table.durationMatrix || table.distanceMatrix;
     }
     return table.distanceMatrix || table.durationMatrix;
+};
+
+const selectAdaptiveStartIndex = (items, optimizeBy, table = null) => {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const costMatrix = table ? selectCostMatrix(table, optimizeBy) : null;
+    const matrix = costMatrix || buildDistanceMatrix(items);
+    let bestIdx = 0;
+    let bestScore = Infinity;
+    for (let i = 0; i < matrix.length; i++) {
+        const row = matrix[i] || [];
+        const score = row.reduce((acc, value, j) => (i === j ? acc : acc + (Number.isFinite(value) ? value : 0)), 0);
+        if (score < bestScore) {
+            bestScore = score;
+            bestIdx = i;
+        }
+    }
+    return bestIdx;
+};
+
+const chooseBestRouteCandidate = (candidates, optimizeBy) => {
+    const valid = (candidates || []).filter((candidate) => (
+        candidate
+        && Array.isArray(candidate.orderedItems)
+        && candidate.orderedItems.length > 0
+        && Number.isFinite(candidate.distance)
+        && Number.isFinite(candidate.duration)
+    ));
+    if (!valid.length) return candidates?.[0] || null;
+    valid.sort((a, b) => {
+        const primaryA = optimizeBy === 'duration' ? a.duration : a.distance;
+        const primaryB = optimizeBy === 'duration' ? b.duration : b.distance;
+        if (primaryA !== primaryB) return primaryA - primaryB;
+        const secondaryA = optimizeBy === 'duration' ? a.distance : a.duration;
+        const secondaryB = optimizeBy === 'duration' ? b.distance : b.duration;
+        return secondaryA - secondaryB;
+    });
+    return valid[0];
 };
 
 const getOSRMTableMatrix = async (items) => {
