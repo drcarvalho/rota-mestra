@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import {
   Play, RefreshCw, Navigation, Zap, Map as MapIcon,
   Truck, LayoutGrid, Settings as SettingsIcon, History,
@@ -8,6 +8,7 @@ import {
 import { parseFile } from './utils/fileParser';
 import { geocodeBatch } from './utils/geocoding';
 import { optimizeRoute } from './utils/optimizer';
+import { buildStopGroups } from './utils/stopGrouping';
 
 import FileUploader from './components/FileUploader';
 import RouteDetails from './components/RouteDetails';
@@ -23,10 +24,11 @@ const MapView = lazy(() => import('./components/MapView'));
 const WORKSPACE_KEY = 'rota_mestra_v4_elite';
 const HISTORY_KEY = 'rota_mestra_v4_history';
 const ACTION_QUEUE_KEY = 'rota_mestra_action_queue_v1';
+const DRIVER_DETAIL_KEY = 'rota_mestra_driver_detail_mode_v1';
 const PANEL_TABS = [
   { key: 'optimizer', label: 'Início', Icon: LayoutGrid },
   { key: 'history', label: 'Histórico', Icon: History },
-  { key: 'settings', label: 'Ajustes', Icon: SettingsIcon }
+  { key: 'settings', label: 'Configurações', Icon: SettingsIcon }
 ];
 const hasValidCoords = (item) => Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
 const isStopResolved = (statusValue) => statusValue === 'done' || statusValue === 'failed';
@@ -34,6 +36,7 @@ const buildInitialStopStatuses = (routeItems) => routeItems.reduce((acc, item, i
   acc[String(item.id)] = idx === 0 ? 'done' : 'pending';
   return acc;
 }, {});
+const pluralize = (count, singular, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`;
 
 function App() {
   const fuelPrice = 5.8;
@@ -65,7 +68,17 @@ function App() {
   const [showStopList, setShowStopList] = useState(false);
   const [showMoreTools, setShowMoreTools] = useState(false);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+  const [deliveryCountMode, setDeliveryCountMode] = useState('stops');
   const [operationMode, setOperationMode] = useState(false);
+  const [driverDetailMode, setDriverDetailMode] = useState(() => {
+    if (typeof window === 'undefined') return 'detailed';
+    try {
+      const saved = localStorage.getItem(DRIVER_DETAIL_KEY);
+      return saved === 'compact' ? 'compact' : 'detailed';
+    } catch {
+      return 'detailed';
+    }
+  });
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [isAppInstalled, setIsAppInstalled] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -119,8 +132,8 @@ function App() {
   }, [isOnline, pendingActions.length]);
 
   useWorkspacePersistence({
-    storageKey: WORKSPACE_KEY, items, routeInfo, roundTrip, startPointId, optimizeBy, routeProfile, stopStatuses, status,
-    setItems, setRouteInfo, setRoundTrip, setStartPointId, setOptimizeBy, setRouteProfile, setStopStatuses, setStatus
+    storageKey: WORKSPACE_KEY, items, routeInfo, roundTrip, startPointId, optimizeBy, routeProfile, stopStatuses, status, deliveryCountMode,
+    setItems, setRouteInfo, setRoundTrip, setStartPointId, setOptimizeBy, setRouteProfile, setStopStatuses, setStatus, setDeliveryCountMode
   });
 
   useEffect(() => {
@@ -137,6 +150,14 @@ function App() {
     const timer = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRIVER_DETAIL_KEY, driverDetailMode);
+    } catch {
+      // noop
+    }
+  }, [driverDetailMode]);
 
   const showToast = (message, type = 'info') => setToast({ message, type });
 
@@ -218,6 +239,7 @@ function App() {
     setStartPointId(null);
     setOptimizeBy('distance');
     setRouteProfile('neutral');
+    setDeliveryCountMode('stops');
     setStopStatuses({});
     setPendingActions([]);
     setShowRouteSummary(false);
@@ -292,16 +314,55 @@ function App() {
         setProgress((prev) => (prev < 97 ? prev + 1 : prev));
       }, 120);
       const sIdx = validItems.findIndex(i => String(i.id) === String(startPointId));
-      const res = await optimizeRoute(validItems, {
-        roundTrip,
-        startIndex: sIdx >= 0 ? sIdx : 0,
-        optimizeBy,
-        routeProfile
-      });
+      let res;
+      let orderedItems;
+      if (deliveryCountMode === 'stops') {
+        const groups = buildStopGroups(validItems);
+        const stopItems = groups.map((group) => {
+          const markerItem = group.items.find(hasValidCoords) || group.items[0];
+          return {
+            ...markerItem,
+            id: `stop-${group.key}`,
+            label: `Parada ${group.stopOrder}`,
+            groupKey: group.key
+          };
+        });
+        const startGroupIndex = groups.findIndex((group) => group.items.some((item) => String(item.id) === String(startPointId)));
+        const stopResult = await optimizeRoute(stopItems, {
+          roundTrip,
+          startIndex: startGroupIndex >= 0 ? startGroupIndex : 0,
+          optimizeBy,
+          routeProfile
+        });
+        const groupsByKey = new Map(groups.map((group) => [group.key, group]));
+        orderedItems = stopResult.orderedItems.flatMap((stop, stopOrderIdx) => {
+          const groupItems = [...(groupsByKey.get(stop.groupKey)?.items || [])];
+          if (stopOrderIdx === 0) {
+            const preferredStartIdx = groupItems.findIndex((item) => String(item.id) === String(startPointId));
+            if (preferredStartIdx > 0) {
+              const [preferred] = groupItems.splice(preferredStartIdx, 1);
+              groupItems.unshift(preferred);
+            }
+          }
+          return groupItems;
+        });
+        res = {
+          ...stopResult,
+          orderedItems
+        };
+      } else {
+        res = await optimizeRoute(validItems, {
+          roundTrip,
+          startIndex: sIdx >= 0 ? sIdx : 0,
+          optimizeBy,
+          routeProfile
+        });
+        orderedItems = res.orderedItems;
+      }
       setProgress(100);
-      setItems(res.orderedItems);
+      setItems(orderedItems);
       setRouteInfo(res);
-      setStopStatuses(buildInitialStopStatuses(res.orderedItems));
+      setStopStatuses(buildInitialStopStatuses(orderedItems));
       setShowRouteSummary(false);
       setShowStopList(false);
       setShowMoreTools(false);
@@ -312,7 +373,7 @@ function App() {
       const optimizedDistanceKm = Number.isFinite(res?.distance) ? res.distance / 1000 : null;
       const optimizedDurationMin = Number.isFinite(res?.duration) ? Math.round(res.duration / 60) : null;
       if (optimizedDistanceKm !== null && optimizedDurationMin !== null) {
-        showToast(`Rota pronta: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
+        showToast(`Rota otimizada: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
       }
       confetti({ particleCount: 200, spread: 70, origin: { y: 0.7 } });
     } catch (err) {
@@ -337,6 +398,28 @@ function App() {
     }
     showToast(
       s === 'done' ? 'Entrega marcada.' : 'Marcado como não entregue.',
+      s === 'done' ? 'success' : 'error'
+    );
+  };
+  const markStopByItemIds = (itemIds, s) => {
+    if (!Array.isArray(itemIds) || itemIds.length === 0) return;
+    setStopStatuses((prev) => {
+      const next = { ...prev };
+      itemIds.forEach((id) => {
+        next[String(id)] = s;
+      });
+      return next;
+    });
+    if (!isOnline) {
+      setPendingActions((current) => ([
+        ...current,
+        ...itemIds.map((id) => ({ stopId: String(id), status: s, timestamp: Date.now() }))
+      ]));
+      showToast('Sem internet. Ações da parada salvas para enviar depois.', 'info');
+      return;
+    }
+    showToast(
+      s === 'done' ? 'Parada marcada como entregue.' : 'Parada marcada como não entregue.',
       s === 'done' ? 'success' : 'error'
     );
   };
@@ -396,24 +479,60 @@ function App() {
       roundTrip,
       optimizeBy,
       routeProfile,
-      startPointId
+      startPointId,
+      deliveryCountMode
     };
     persistHistory([entry, ...routeHistory].slice(0, 30));
     showToast('Rota guardada no histórico.', 'success');
   };
   const processingLabel = status === 'uploading'
-    ? 'Lendo planilha'
+    ? 'Importando planilha'
     : status === 'geocoding'
-      ? 'Localizando endereços'
-      : 'Montando rota';
-  const routeCount = Math.max(0, items.length - 1);
+      ? 'Geocodificando endereços'
+      : 'Calculando melhor rota';
+  const packageCount = Math.max(0, items.length - 1);
+  const stopGroups = useMemo(() => buildStopGroups(items), [items]);
+  const stopCount = stopGroups.length;
+  const routeCount = deliveryCountMode === 'stops' ? stopCount : packageCount;
+  const routeCountLabel = deliveryCountMode === 'stops'
+    ? pluralize(routeCount, 'parada')
+    : pluralize(routeCount, 'pacote');
+  const stopInfoByItemId = useMemo(() => {
+    const map = new Map();
+    stopGroups.forEach((group) => {
+      const itemIds = group.items.map((item) => String(item.id));
+      group.items.forEach((item) => {
+        map.set(String(item.id), {
+          stopOrder: group.stopOrder,
+          packageCount: group.items.length,
+          itemIds
+        });
+      });
+    });
+    return map;
+  }, [stopGroups]);
+  const currentStopInfo = currentItem ? stopInfoByItemId.get(String(currentItem.id)) : null;
+  const currentStopProgress = useMemo(() => {
+    if (!currentStopInfo?.itemIds) return null;
+    const total = currentStopInfo.itemIds.length;
+    let done = 0;
+    let failed = 0;
+    currentStopInfo.itemIds.forEach((id) => {
+      const statusValue = stopStatuses[String(id)] || 'pending';
+      if (statusValue === 'done') done += 1;
+      if (statusValue === 'failed') failed += 1;
+    });
+    const pending = Math.max(0, total - done - failed);
+    return { total, done, failed, pending };
+  }, [currentStopInfo, stopStatuses]);
+  const activeFiltersLabel = `${deliveryCountMode === 'stops' ? 'Paradas' : 'Pacotes'} + ${optimizeBy === 'duration' ? 'Menor tempo' : 'Menor distância'}`;
   const headerStageLabel = status === 'ready'
-    ? 'Rota pronta'
+    ? 'Rota otimizada'
     : status === 'geocoding' || status === 'optimizing' || status === 'uploading'
       ? processingLabel
       : routeCount > 0
-        ? 'Pronta para montar'
-        : 'Nova rota';
+        ? 'Pronto para otimizar'
+        : 'Novo planejamento';
   const detectedCity = (() => {
     const cityCounter = new Map();
     items.forEach((item) => {
@@ -444,7 +563,7 @@ function App() {
           <div className="brand-icon-box"><Truck size={20} /></div>
           <div className="brand-copy">
             <span className="brand-text">RotaBoa</span>
-            <span className="brand-caption hide-mobile">Rota de entregas do dia</span>
+            <span className="brand-caption hide-mobile">Operação de entregas</span>
           </div>
         </div>
         <div className="header-kpis hide-mobile">
@@ -453,7 +572,7 @@ function App() {
             {headerStageLabel}
           </div>
           <div className="header-pill">
-            {routeCount} entrega(s)
+            {routeCountLabel}
           </div>
           <div className={`header-pill ${isOnline ? 'header-pill-online' : 'header-pill-offline'}`}>
             {isOnline ? 'Online' : 'Offline'}
@@ -465,10 +584,10 @@ function App() {
             className="top-glass-settings-btn"
             onClick={() => switchToTab('settings')}
             aria-label="Abrir ajustes"
-            title="Ajustes"
+            title="Configurações"
           >
             <SettingsIcon size={16} />
-            <span className="hide-mobile">Ajustes</span>
+            <span className="hide-mobile">Configurações</span>
           </Button>
           {!isMobile && (
             <Button
@@ -483,7 +602,7 @@ function App() {
           )}
           {!isMobile && items.length > 0 && (
             <Button variant="o" className="top-glass-reset-btn" onClick={resetWorkspace}>
-              Nova rota
+              Novo planejamento
             </Button>
           )}
         </div>
@@ -510,6 +629,18 @@ function App() {
             <>
               {activeTab === 'optimizer' && (
                 <div key="opt">
+                  {items.length > 1 && (
+                    <div className="counter-mode-bar">
+                      <span className="config-label">Contagem</span>
+                      <select
+                        value={deliveryCountMode}
+                        onChange={(e) => setDeliveryCountMode(e.target.value === 'stops' ? 'stops' : 'packages')}
+                      >
+                        <option value="packages">Por pacotes</option>
+                        <option value="stops">Por paradas (agrupando quadra)</option>
+                      </select>
+                    </div>
+                  )}
                   {/* Empty State / Hero */}
                   {status === 'idle' && items.length === 0 && (
                     <div className="animate-slide-up hero-container">
@@ -568,15 +699,15 @@ function App() {
                     <div className="animate-slide-up panel-stack">
                       <div className="bento-card">
                         <h3 className="planner-title">Montar rota</h3>
-                        <div className="import-ready-pill">Planilha pronta para montar a rota</div>
-                        <p className="clean-muted planner-meta">{Math.max(0, items.length - 1)} entrega(s).</p>
+                        <div className="import-ready-pill">Planilha validada e pronta para otimização</div>
+                        <p className="clean-muted planner-meta">{routeCountLabel}.</p>
                         {detectedCity && <p className="clean-muted planner-city">Região principal: {detectedCity}</p>}
                         <div className="planner-quick-actions">
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowAdvancedConfig((v) => !v)}>
-                            {showAdvancedConfig ? 'Ocultar opções' : 'Opções extras'}
+                            {showAdvancedConfig ? 'Ocultar avançado' : 'Configurações avançadas'}
                           </Button>
                           <Button variant="outline" size="sm" fullWidth onClick={resetWorkspace}>
-                            Trocar planilha
+                            Substituir planilha
                           </Button>
                         </div>
 
@@ -607,7 +738,7 @@ function App() {
                             </>
                           )}
                           <Button variant="p" fullWidth size="lg" className="sticky-optimize-btn" onClick={startOptimization}>
-                            <Zap size={20} fill="white" /> Montar rota
+                            <Zap size={20} fill="white" /> Otimizar rota
                           </Button>
                         </div>
                       </div>
@@ -619,14 +750,14 @@ function App() {
                     <div className="animate-slide-up ready-stack">
                       {!currentItem && (
                         <div className="bento-card clean-next-stop-card">
-                          <p className="finished-title">Rota finalizada</p>
+                          <p className="finished-title">Operação concluída</p>
                           <p className="finished-subtitle">
                             Todas as entregas foram concluídas.
                           </p>
                           <div className="quick-overview-grid finished-grid">
                             <span>Prioridade: <b>{routeObjectiveLabel}</b></span>
-                            <span>Entregues: <b>{deliveryStats.done}</b></span>
-                            <span>Não entregues: <b>{deliveryStats.failed}</b></span>
+                            <span>Concluídas: <b>{deliveryStats.done}</b></span>
+                            <span>Não concluídas: <b>{deliveryStats.failed}</b></span>
                           </div>
                         </div>
                       )}
@@ -649,19 +780,19 @@ function App() {
                           <div className="delivery-action-grid next-stop-actions">
                             <div className="secondary-actions-row secondary-actions-row-strong">
                               <Button variant="success" className="action-btn action-btn-success action-btn-status" onClick={() => markStatus(currentIdx, 'done')}>
-                                Entregue
+                                Marcar entregue
                               </Button>
                               <Button variant="danger" className="action-btn action-btn-danger action-btn-status" onClick={() => markStatus(currentIdx, 'failed')}>
-                                Não entregue
+                                Marcar não entregue
                               </Button>
                             </div>
                             {isMobile ? (
                               <Button variant="primary" size="sm" className="action-btn action-btn-driver" onClick={() => { setOperationMode(true); setMobileView('map'); }}>
-                                <Navigation size={15} /> Tela do motorista
+                                <Navigation size={15} /> Modo motorista
                               </Button>
                             ) : (
                               <Button variant="outline" size="sm" className="action-btn action-btn-maps action-btn-maps-secondary" onClick={openCurrentNavigation}>
-                                <Navigation size={15} /> Navegar no Google Maps
+                                <Navigation size={15} /> Abrir no Google Maps
                               </Button>
                             )}
                           </div>
@@ -670,7 +801,7 @@ function App() {
 
                       {upcomingStops.length > 0 && (
                         <div className="bento-card upcoming-card">
-                          <p className="config-label upcoming-title">Próximas entregas</p>
+                          <p className="config-label upcoming-title">Próximas etapas</p>
                           <div className="upcoming-list">
                             {upcomingStops.map(({ item, idx }, position) => (
                               <div key={`upcoming-${item.id}`} className="upcoming-item">
@@ -690,26 +821,27 @@ function App() {
                       )}
 
                       <Button variant="outline" size="sm" fullWidth onClick={() => setShowMoreTools((v) => !v)}>
-                        {showMoreTools ? 'Menos opções' : 'Outras ações'}
+                        {showMoreTools ? 'Ocultar ferramentas' : 'Ferramentas'}
                       </Button>
 
                       {showMoreTools && (
                         <>
                           <div className="secondary-actions-row">
                             <Button variant="o" size="sm" fullWidth onClick={() => setStatus('idle')}>
-                              <RefreshCw size={15} /> Recomeçar rota
+                              <RefreshCw size={15} /> Reiniciar operação
                             </Button>
                             <Button variant="outline" size="sm" fullWidth onClick={saveCurrentRoute}>
-                              Guardar rota
+                              Salvar no histórico
                             </Button>
                           </div>
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowStopList((v) => !v)}>
-                            {showStopList ? 'Ocultar entregas' : 'Ver entregas'}
+                            {showStopList ? 'Ocultar lista completa' : 'Ver lista completa'}
                           </Button>
                           {showStopList && (
                             <RouteDetails
                               items={items}
                               stopStatuses={stopStatuses}
+                              deliveryCountMode={deliveryCountMode}
                               onActionFeedback={showToast}
                               onMarkDone={idx => markStatus(idx, 'done')}
                               onMarkFailed={idx => markStatus(idx, 'failed')}
@@ -724,13 +856,13 @@ function App() {
                             />
                           )}
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
-                            {showRouteSummary ? 'Ocultar resumo' : 'Resumo da rota'}
+                            {showRouteSummary ? 'Ocultar resumo operacional' : 'Ver resumo operacional'}
                           </Button>
                         </>
                       )}
                       {isMobile && (
                         <Button variant="primary" fullWidth onClick={openCurrentNavigation}>
-                          <Navigation size={16} /> Navegar no Google Maps
+                          <Navigation size={16} /> Abrir no Google Maps
                         </Button>
                       )}
                       {showMoreTools && showRouteSummary && (
@@ -777,6 +909,7 @@ function App() {
                     setOptimizeBy(l.optimizeBy === 'duration' ? 'duration' : 'distance');
                     setRouteProfile(l.routeProfile === 'shopee' || l.routeProfile === 'mercado_livre' ? l.routeProfile : 'neutral');
                     setStartPointId(l.startPointId ?? l.items?.[0]?.id ?? null);
+                    setDeliveryCountMode(l.deliveryCountMode === 'packages' ? 'packages' : 'stops');
                     setStopStatuses(buildInitialStopStatuses(l.items || []));
                     setStatus(l.routeInfo ? 'ready' : 'idle');
                     setShowStopList(false);
@@ -809,7 +942,7 @@ function App() {
         {/* MAP VIEWPORT */}
         <div className="map-viewport">
           <Suspense fallback={<div className="loading-spinner"></div>}>
-            <MapView items={items} routeGeometry={routeInfo?.geometry} stopStatuses={stopStatuses} nextStopIndex={currentIdx} isVisible={!(isMobile && mobileView === 'panel')} />
+            <MapView items={items} routeGeometry={routeInfo?.geometry} stopStatuses={stopStatuses} nextStopIndex={currentIdx} deliveryCountMode={deliveryCountMode} isVisible={!(isMobile && mobileView === 'panel')} />
           </Suspense>
 
           {/* Floating Mobile Map HUD */}
@@ -819,25 +952,52 @@ function App() {
                 <div className="status-glow" />
                 <span className="hud-title">PRÓXIMA ENTREGA</span>
               </div>
+              {deliveryCountMode === 'stops' && currentStopInfo && (
+                <p className="clean-muted" style={{ marginBottom: '0.25rem', fontWeight: 700 }}>
+                  PARADA {currentStopInfo.stopOrder} · {pluralize(currentStopInfo.packageCount, 'pacote')}
+                </p>
+              )}
+              {deliveryCountMode === 'stops' && currentStopProgress && (
+                <p className="clean-muted" style={{ marginBottom: '0.25rem', fontWeight: 700 }}>
+                  {currentStopProgress.done}/{currentStopProgress.total} entregues · {currentStopProgress.pending} pendente(s)
+                </p>
+              )}
               <h2 className="hud-address">{currentItem.address}</h2>
               <div className="hud-action-grid">
                 <button type="button" className="btn-elite btn-p hud-action-btn" onClick={openCurrentNavigation}>
                   <Navigation size={18} fill="white" /> Navegar
                 </button>
                 <button type="button" className="btn-elite btn-success hud-action-btn" onClick={() => markStatus(currentIdx, 'done')}>
-                  Entregue
+                  Marcar entregue
                 </button>
                 <button type="button" className="btn-elite btn-danger hud-action-btn" onClick={() => markStatus(currentIdx, 'failed')}>
-                  Não entregue
+                  Marcar não entregue
                 </button>
               </div>
+              {deliveryCountMode === 'stops' && currentStopInfo?.itemIds?.length > 1 && (
+                <div className="hud-action-grid" style={{ marginTop: '0.45rem' }}>
+                  <button type="button" className="btn-elite btn-success hud-action-btn" onClick={() => markStopByItemIds(currentStopInfo.itemIds, 'done')}>
+                    Entregue parada
+                  </button>
+                  <button type="button" className="btn-elite btn-danger hud-action-btn" onClick={() => markStopByItemIds(currentStopInfo.itemIds, 'failed')}>
+                    Falha parada
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
           {isMobile && operationMode && status === 'ready' && (
             <div className="operation-mode-overlay">
               <div className="operation-mode-head">
-                <span>Tela do motorista</span>
+                <span>Tela do motorista · {activeFiltersLabel}</span>
+                <button
+                  type="button"
+                  className="operation-close-btn"
+                  onClick={() => setDriverDetailMode((mode) => (mode === 'detailed' ? 'compact' : 'detailed'))}
+                >
+                  {driverDetailMode === 'detailed' ? 'Compactar' : 'Detalhar'}
+                </button>
                 <button type="button" className="operation-close-btn" onClick={() => setOperationMode(false)}>
                   Fechar
                 </button>
@@ -845,19 +1005,39 @@ function App() {
               {currentItem ? (
                 <>
                   <p className="operation-label">PRÓXIMA ENTREGA</p>
-                  <h2 className="operation-address">{currentItem.address}</h2>
+                  {deliveryCountMode === 'stops' && currentStopInfo && (
+                    <p className="operation-label">
+                      PARADA {currentStopInfo.stopOrder} · {pluralize(currentStopInfo.packageCount, 'pacote')}
+                    </p>
+                  )}
+                  {deliveryCountMode === 'stops' && currentStopProgress && (
+                    <p className="operation-label">
+                      {currentStopProgress.done}/{currentStopProgress.total} entregues · {currentStopProgress.pending} pendente(s)
+                    </p>
+                  )}
+                  {driverDetailMode === 'detailed' && <h2 className="operation-address">{currentItem.address}</h2>}
 
                   <div className="primary-actions-bottom-row">
                     <button type="button" className="operation-btn operation-btn-success" onClick={() => markStatus(currentIdx, 'done')}>
-                      Entregue
+                      Marcar entregue
                     </button>
                     <button type="button" className="operation-btn operation-btn-primary" onClick={openCurrentNavigation}>
-                      <Navigation size={20} /> Google Maps
+                      <Navigation size={20} /> Abrir no Maps
                     </button>
                     <button type="button" className="operation-btn operation-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                      Não entregue
+                      Marcar não entregue
                     </button>
                   </div>
+                  {deliveryCountMode === 'stops' && currentStopInfo?.itemIds?.length > 1 && (
+                    <div className="primary-actions-bottom-row" style={{ marginTop: '0.55rem' }}>
+                      <button type="button" className="operation-btn operation-btn-success" onClick={() => markStopByItemIds(currentStopInfo.itemIds, 'done')}>
+                        Entregue parada
+                      </button>
+                      <button type="button" className="operation-btn operation-btn-danger" onClick={() => markStopByItemIds(currentStopInfo.itemIds, 'failed')}>
+                        Falha parada
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -898,7 +1078,7 @@ function App() {
             disabled={!currentItem && status !== 'idle'}
           >
             {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
-            {status === 'ready' ? 'Navegar agora' : 'Começar rota'}
+            {status === 'ready' ? 'Navegar' : 'Otimizar'}
           </button>
         </nav>
       )}

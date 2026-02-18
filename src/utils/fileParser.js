@@ -66,6 +66,43 @@ const normalizeText = (value) =>
 
 const normalizeKey = (value) => normalizeText(value).replace(/[^a-z0-9]/g, '');
 
+const normalizeStreetNumberToken = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+
+    const withoutPrefix = raw
+        .replace(/^\s*(?:n(?:um(?:ero)?)?|n[º°o]?\.?)\s*/i, '')
+        .trim();
+    if (!withoutPrefix) return '';
+
+    const withSeparator = withoutPrefix.match(/^(\d+)\s*[-/.]\s*(\d+)$/);
+    if (withSeparator) return `${withSeparator[1]}-${withSeparator[2]}`;
+
+    if (/^\d{3,}$/.test(withoutPrefix)) {
+        const splitAt = withoutPrefix.length - 2;
+        return `${withoutPrefix.slice(0, splitAt)}-${withoutPrefix.slice(splitAt)}`;
+    }
+
+    return withoutPrefix;
+};
+
+const normalizeAddressNumberNotation = (value) => {
+    let text = String(value ?? '').trim();
+    if (!text) return '';
+
+    text = text.replace(
+        /\b(?:n(?:um(?:ero)?)?|n[º°o]?\.?)\s*(\d{3,})\b/gi,
+        (_, digits) => `N ${normalizeStreetNumberToken(digits)}`
+    );
+
+    text = text.replace(
+        /\b(?:n(?:um(?:ero)?)?|n[º°o]?\.?)\s*(\d+\s*[-/.]\s*\d+)\b/gi,
+        (_, token) => `N ${normalizeStreetNumberToken(token)}`
+    );
+
+    return text.replace(/(\d+)\s*[/.]\s*(\d+)/g, '$1-$2');
+};
+
 const isLikelyAddressText = (value) => {
     const text = normalizeText(value);
     if (text.length < 8) return false;
@@ -215,16 +252,19 @@ const processData = (data) => {
         const latK = findKey(safeRow, maps.lat);
         const lonK = findKey(safeRow, maps.lon);
 
+        const normalizedNumber = numKey ? normalizeStreetNumberToken(safeRow[numKey]) : '';
+
         let fullAddress = "";
         if (addrKey && safeRow[addrKey]) {
-            fullAddress = String(safeRow[addrKey]).trim();
-            if (numKey && safeRow[numKey] && !fullAddress.includes(String(safeRow[numKey]))) {
-                fullAddress += `, ${safeRow[numKey]}`;
+            fullAddress = normalizeAddressNumberNotation(safeRow[addrKey]);
+            if (normalizedNumber && !fullAddress.includes(normalizedNumber)) {
+                fullAddress += `, ${normalizedNumber}`;
             }
         }
         if (!fullAddress) {
             fullAddress = extractAddressFromValues(safeRow, new Set([numKey, cityKey, stateKey, zipKey, nameKey, latK, lonK]));
         }
+        fullAddress = normalizeAddressNumberNotation(fullAddress);
 
         const city = cityKey ? String(safeRow[cityKey]).trim() : "";
         const state = stateKey ? String(safeRow[stateKey]).trim() : "";
@@ -246,7 +286,7 @@ const processData = (data) => {
         const observation = observationKey ? String(safeRow[observationKey] ?? '').trim() : '';
 
         // Clean address construction
-        let lookupString = String(fullAddress || '').trim();
+        let lookupString = normalizeAddressNumberNotation(fullAddress);
         if (city && !lookupString.toLowerCase().includes(city.toLowerCase())) lookupString += `, ${city}`;
         if (state && !lookupString.toLowerCase().includes(state.toLowerCase())) lookupString += `, ${state}`;
         if (zip && !lookupString.includes(zip)) lookupString += `, ${zip}`;

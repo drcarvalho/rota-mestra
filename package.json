@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:logic": "node test-logic.cjs"
+    "test:logic": "node test-logic.cjs",
+    "test:stops": "node test-stop-grouping.cjs"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

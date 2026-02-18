@@ -68,10 +68,10 @@ const FileUploader = ({ onUpload, onValidationError }) => {
                 </div>
 
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                    Enviar planilha de entregas
+                    Importar planilha de entregas
                 </h3>
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '280px', margin: '0 auto', lineHeight: 1.5 }}>
-                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b>, ou toque para escolher.
+                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b>, ou clique para selecionar.
                 </p>
 
                 <div className="upload-format-badges">

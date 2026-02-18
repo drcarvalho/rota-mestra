@@ -26,6 +26,7 @@ export const useWorkspacePersistence = ({
     routeProfile,
     stopStatuses,
     status,
+    deliveryCountMode,
     setItems,
     setRouteInfo,
     setRoundTrip,
@@ -33,7 +34,8 @@ export const useWorkspacePersistence = ({
     setOptimizeBy,
     setRouteProfile,
     setStopStatuses,
-    setStatus
+    setStatus,
+    setDeliveryCountMode
 }) => {
     useEffect(() => {
         const savedWorkspace = safeStorageRead(storageKey);
@@ -48,6 +50,7 @@ export const useWorkspacePersistence = ({
             if (parsed.optimizeBy === 'distance' || parsed.optimizeBy === 'duration') setOptimizeBy(parsed.optimizeBy);
             if (parsed.routeProfile === 'neutral' || parsed.routeProfile === 'shopee' || parsed.routeProfile === 'mercado_livre') setRouteProfile(parsed.routeProfile);
             if (parsed.stopStatuses && typeof parsed.stopStatuses === 'object') setStopStatuses(parsed.stopStatuses);
+            if (parsed.deliveryCountMode === 'stops' || parsed.deliveryCountMode === 'packages') setDeliveryCountMode(parsed.deliveryCountMode);
             if (parsed.status === 'ready' && parsed.routeInfo && Array.isArray(parsed.items) && parsed.items.length > 0) {
                 setStatus('ready');
             }
@@ -63,7 +66,8 @@ export const useWorkspacePersistence = ({
         setOptimizeBy,
         setRouteProfile,
         setStopStatuses,
-        setStatus
+        setStatus,
+        setDeliveryCountMode
     ]);
 
     useEffect(() => {
@@ -77,6 +81,7 @@ export const useWorkspacePersistence = ({
             optimizeBy,
             routeProfile,
             stopStatuses,
+            deliveryCountMode,
             status: status === 'ready' ? 'ready' : 'idle'
         };
         safeStorageWrite(storageKey, JSON.stringify(payload));
@@ -89,6 +94,7 @@ export const useWorkspacePersistence = ({
         optimizeBy,
         routeProfile,
         stopStatuses,
+        deliveryCountMode,
         status
     ]);
 };
