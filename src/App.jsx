@@ -193,7 +193,7 @@ function App() {
         ...current,
         { stopId, status: s, timestamp: Date.now() }
       ]));
-      showToast('Sem internet: ação salva para sincronizar.', 'info');
+      showToast('Sem internet. Ação salva e será sincronizada quando voltar conexão.', 'info');
       return;
     }
     showToast(
@@ -247,7 +247,7 @@ function App() {
           )}
           {!isMobile && items.length > 0 && (
             <Button variant="o" style={{ borderRadius: '12px' }} onClick={resetWorkspace}>
-              Reiniciar
+              Nova rota
             </Button>
           )}
         </div>
@@ -265,7 +265,7 @@ function App() {
                   {status === 'idle' && items.length === 0 && (
                     <div className="animate-slide-up" style={{ padding: '2rem 0', textAlign: 'center' }}>
                       <div style={{ marginBottom: '1.5rem', display: 'inline-flex', padding: '8px 16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.85rem' }}>
-                        PLANEJAMENTO DE ENTREGAS
+                        Planejamento de entregas
                       </div>
                       <h1 style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>Otimize suas entregas</h1>
                       <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Importe sua planilha e calcule a melhor rota.</p>
@@ -277,7 +277,7 @@ function App() {
                   {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
                     <div className="bento-card text-center">
                       <div className="loading-spinner" style={{ margin: '0 auto 1rem', width: '44px', height: '44px' }} />
-                      <h3 style={{ fontWeight: 800 }}>Processando rota</h3>
+                      <h3 style={{ fontWeight: 800 }}>Processando dados da rota</h3>
                       <div className="progress-bar-track" style={{ height: '10px', marginTop: '1.5rem' }}>
                         <div className="progress-bar-fill" style={{ width: `${progress}%`, borderRadius: '10px' }} />
                       </div>
@@ -289,7 +289,7 @@ function App() {
                   {status === 'idle' && items.length > 0 && (
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div className="bento-card">
-                        <h3 style={{ fontWeight: 800, marginBottom: '1.25rem' }}>Definições da Rota</h3>
+                        <h3 style={{ fontWeight: 800, marginBottom: '1.25rem' }}>Configuração da rota</h3>
                         <div style={{ display: 'grid', gap: '1rem' }}>
                           <div className="config-option">
                             <span className="config-label">Objetivo da rota</span>
@@ -299,7 +299,7 @@ function App() {
                             </select>
                           </div>
                           <div className="config-option">
-                            <span className="config-label">Ponto de Partida</span>
+                            <span className="config-label">Ponto de partida</span>
                             <select value={startPointId ?? ''} onChange={e => setStartPointId(e.target.value)}>
                               {items.map((it, i) => <option key={it.id} value={it.id}>{i + 1}. {it.address}</option>)}
                             </select>
@@ -324,7 +324,7 @@ function App() {
                               <Navigation size={16} /> Navegar agora
                             </Button>
                             <Button variant="outline" onClick={() => markStatus(currentIdx, 'done')}>
-                              Entregue
+                              Marcar entregue
                             </Button>
                           </div>
                         </div>
@@ -352,7 +352,7 @@ function App() {
                         Salvar no histórico
                       </Button>
                       <Button variant="outline" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
-                        {showRouteSummary ? 'Ocultar resumo' : 'Resumo da rota'}
+                        {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
                       </Button>
                       {showRouteSummary && (
                         <div className="bento-card" style={{ padding: '0.9rem' }}>
@@ -475,7 +475,7 @@ function App() {
             onClick={() => { setMobileView('panel'); setActiveTab('settings'); }}
           >
             <SettingsIcon size={18} />
-            Ajustes
+            Configurações
           </button>
         </nav>
       )}

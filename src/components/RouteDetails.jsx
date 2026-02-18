@@ -143,10 +143,10 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                                             <Copy size={13} /> Copiar
                                         </Button>
                                         <Button variant="outline" size="sm" onClick={() => onMarkDone?.(idx)}>
-                                            <CheckCircle2 size={13} /> Entregue
+                                            <CheckCircle2 size={13} /> Marcar entregue
                                         </Button>
                                         <Button variant="outline" size="sm" onClick={() => onMarkFailed?.(idx)}>
-                                            <XCircle size={13} /> Não entregue
+                                            <XCircle size={13} /> Marcar não entregue
                                         </Button>
                                     </div>
                                 )}
@@ -157,7 +157,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
             </Card>
 
             <Card style={{ padding: '0.9rem' }}>
-                <SectionHeader title="Navegação externa" />
+                <SectionHeader title="Abrir em aplicativos" />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                     <Button variant="primary" onClick={openWaze}>
                         <Navigation size={16} /> Abrir no Waze
@@ -166,7 +166,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                         <ExternalLink size={16} /> Abrir no Google Maps
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }}>
-                        Imprimir rota
+                        Imprimir comprovante
                     </Button>
                 </div>
             </Card>

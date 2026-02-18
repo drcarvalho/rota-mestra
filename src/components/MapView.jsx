@@ -189,12 +189,12 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
             )}
 
             <div style={{ position: 'absolute', right: '10px', bottom: '10px', zIndex: 900, background: 'rgba(255,255,255,0.9)', borderRadius: '8px', padding: '6px 10px', fontSize: '12px', border: '1px solid #d1d5db' }}>
-                Base: {provider.name}
+                Mapa base: {provider.name}
             </div>
 
             {!hasLoadedTile && (
                 <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 900, background: 'rgba(255,255,255,0.95)', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', border: '1px solid #d1d5db', maxWidth: '220px' }}>
-                    <p style={{ marginBottom: '6px', color: '#334155' }}>Mapa carregando. Se falhar, troque a base.</p>
+                    <p style={{ marginBottom: '6px', color: '#334155' }}>Carregando mapa. Se não abrir, toque em "Alterar base".</p>
                     <button
                         style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 8px', background: '#fff', cursor: 'pointer' }}
                         onClick={() => {
