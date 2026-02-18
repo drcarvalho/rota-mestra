@@ -70,10 +70,20 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const indexedItems = items.map((item, idx) => ({ item, idx }));
+    const summary = indexedItems.reduce((acc, { item, idx }) => {
+        if (idx === 0) return acc;
+        const status = stopStatuses[String(item.id)] || 'pending';
+        acc.total += 1;
+        if (status === 'done') acc.done += 1;
+        else if (status === 'failed') acc.failed += 1;
+        else acc.pending += 1;
+        return acc;
+    }, { total: 0, done: 0, failed: 0, pending: 0 });
     const filteredItems = indexedItems.filter(({ item, idx }) =>
         String(item.address || '').toLowerCase().includes(normalizedSearch) ||
         String(idx + 1).includes(normalizedSearch)
     );
+    const showSearch = items.length > 8;
 
     const handlePrint = () => {
         window.print();
@@ -97,25 +107,33 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 />
 
                 {/* Search Bar */}
-                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
-                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input
-                        type="text"
-                        placeholder="Buscar endereço ou parada..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{
-                            width: '100%',
-                            padding: '0.6rem 0.75rem 0.6rem 2rem',
-                            borderRadius: '10px',
-                            border: '1px solid var(--border)',
-                            fontSize: '0.8rem',
-                            background: 'var(--bg)',
-                            color: 'var(--text-main)',
-                            outline: 'none'
-                        }}
-                    />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                    <StatusBadge tone="success" label={`Entregues: ${summary.done}`} />
+                    <StatusBadge tone="warning" label={`Pendentes: ${summary.pending}`} />
+                    <StatusBadge tone="error" label={`Falhas: ${summary.failed}`} />
                 </div>
+
+                {showSearch && (
+                    <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                        <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        <input
+                            type="text"
+                            placeholder="Buscar endereço ou parada..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '0.6rem 0.75rem 0.6rem 2rem',
+                                borderRadius: '10px',
+                                border: '1px solid var(--border)',
+                                fontSize: '0.8rem',
+                                background: 'var(--bg)',
+                                color: 'var(--text-main)',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', maxHeight: '460px', overflowY: 'auto' }} className="custom-scroll">
                     {filteredItems.map(({ item, idx }) => {
@@ -138,15 +156,15 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                                     </div>
                                 </div>
                                 {idx > 0 && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
-                                        <Button variant="outline" size="sm" onClick={() => onCopyAddress?.(item.address)}>
+                                    <div className="route-stop-actions">
+                                        <Button variant="success" size="sm" className="route-stop-mini-btn" onClick={() => onMarkDone?.(idx)}>
+                                            <CheckCircle2 size={13} /> Entregue
+                                        </Button>
+                                        <Button variant="danger" size="sm" className="route-stop-mini-btn" onClick={() => onMarkFailed?.(idx)}>
+                                            <XCircle size={13} /> Falhou
+                                        </Button>
+                                        <Button variant="outline" size="sm" className="route-stop-mini-btn" onClick={() => onCopyAddress?.(item.address)}>
                                             <Copy size={13} /> Copiar
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={() => onMarkDone?.(idx)}>
-                                            <CheckCircle2 size={13} /> Marcar entregue
-                                        </Button>
-                                        <Button variant="outline" size="sm" onClick={() => onMarkFailed?.(idx)}>
-                                            <XCircle size={13} /> Marcar não entregue
                                         </Button>
                                     </div>
                                 )}
@@ -158,7 +176,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
             <Card style={{ padding: '0.9rem' }}>
                 <SectionHeader title="Abrir em aplicativos" />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                <div className="route-external-actions">
                     <Button variant="primary" onClick={openWaze}>
                         <Navigation size={16} /> Abrir no Waze
                     </Button>
@@ -166,7 +184,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                         <ExternalLink size={16} /> Abrir no Google Maps
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }}>
-                        Imprimir comprovante
+                        Imprimir lista
                     </Button>
                 </div>
             </Card>

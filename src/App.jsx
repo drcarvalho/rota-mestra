@@ -131,6 +131,7 @@ function App() {
   const handleUpload = async (file) => {
     try {
       setStatus('uploading');
+      setProgress(0);
       const data = await parseFile(file);
       if (!Array.isArray(data) || data.length === 0) {
         throw new Error('Arquivo sem dados válidos.');
@@ -139,6 +140,8 @@ function App() {
       setStartPointId(data[0]?.id ?? null);
       setStopStatuses({});
       setShowRouteSummary(false);
+      setActiveTab('optimizer');
+      setMobileView('panel');
       setStatus('idle');
       showToast('Dados consolidados!', 'success');
     } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
@@ -146,13 +149,14 @@ function App() {
 
   const startOptimization = async () => {
     if (!items.length) return;
+    if (status === 'geocoding' || status === 'optimizing' || status === 'uploading') return;
     setProgress(0);
     setStatus('geocoding');
     let optimizeProgressTimer = null;
     try {
       const geo = await geocodeBatch(items, (c, t) => {
         // Phase 1: geocoding fills 0-80%
-        const geocodeProgress = Math.round((c / t) * 80);
+        const geocodeProgress = t > 0 ? Math.round((c / t) * 80) : 0;
         setProgress(Math.max(0, Math.min(80, geocodeProgress)));
       });
       const validItems = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
@@ -175,6 +179,11 @@ function App() {
       setShowRouteSummary(false);
       setStatus('ready');
       if (isMobile) setMobileView('panel');
+      const optimizedDistanceKm = Number.isFinite(res?.distance) ? res.distance / 1000 : null;
+      const optimizedDurationMin = Number.isFinite(res?.duration) ? Math.round(res.duration / 60) : null;
+      if (optimizedDistanceKm !== null && optimizedDurationMin !== null) {
+        showToast(`Rota pronta: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
+      }
       confetti({ particleCount: 200, spread: 70, origin: { y: 0.7 } });
     } catch (err) {
       showToast(err.message, 'error');
@@ -204,6 +213,18 @@ function App() {
 
   const currentIdx = items.findIndex((it, i) => i > 0 && stopStatuses[String(it.id)] !== 'done');
   const currentItem = currentIdx > 0 ? items[currentIdx] : null;
+  const deliveryStats = items.reduce((acc, item, idx) => {
+    if (idx === 0) return acc;
+    acc.total += 1;
+    const statusValue = stopStatuses[String(item.id)] || 'pending';
+    if (statusValue === 'done') acc.done += 1;
+    else if (statusValue === 'failed') acc.failed += 1;
+    else acc.pending += 1;
+    return acc;
+  }, { total: 0, done: 0, failed: 0, pending: 0 });
+  const deliveryProgressPercent = deliveryStats.total > 0
+    ? Math.round((deliveryStats.done / deliveryStats.total) * 100)
+    : 0;
   const baselineKm = routeInfo?.baseline?.distance ? routeInfo.baseline.distance / 1000 : null;
   const optimizedKm = routeInfo?.distance ? routeInfo.distance / 1000 : null;
   const baselineMin = routeInfo?.baseline?.duration ? Math.round(routeInfo.baseline.duration / 60) : null;
@@ -211,6 +232,15 @@ function App() {
   const savedKm = baselineKm !== null && optimizedKm !== null ? Math.max(0, baselineKm - optimizedKm) : null;
   const savedMin = baselineMin !== null && optimizedMin !== null ? Math.max(0, baselineMin - optimizedMin) : null;
   const estimatedFuelCost = optimizedKm !== null ? (optimizedKm / autonomy) * fuelPrice : null;
+  const routeObjectiveLabel = optimizeBy === 'duration' ? 'Menor tempo' : 'Menor distância';
+  const routeQuality = (() => {
+    if (baselineKm === null || optimizedKm === null || baselineKm <= 0) return null;
+    const reductionPercent = ((baselineKm - optimizedKm) / baselineKm) * 100;
+    if (reductionPercent >= 20) return { label: 'Excelente', tone: 'success' };
+    if (reductionPercent >= 10) return { label: 'Muito boa', tone: 'info' };
+    if (reductionPercent >= 3) return { label: 'Boa', tone: 'warning' };
+    return { label: 'Sem ganho relevante', tone: 'neutral' };
+  })();
   const openCurrentNavigation = () => {
     if (!currentItem?.coords) return;
     window.open(`https://waze.com/ul?ll=${currentItem.coords.lat},${currentItem.coords.lon}&navigate=yes`, '_blank', 'noopener,noreferrer');
@@ -264,11 +294,8 @@ function App() {
                   {/* Empty State / Hero */}
                   {status === 'idle' && items.length === 0 && (
                     <div className="animate-slide-up" style={{ padding: '2rem 0', textAlign: 'center' }}>
-                      <div style={{ marginBottom: '1.5rem', display: 'inline-flex', padding: '8px 16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.85rem' }}>
-                        Planejamento de entregas
-                      </div>
-                      <h1 style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>Otimize suas entregas</h1>
-                      <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Importe sua planilha e calcule a melhor rota.</p>
+                      <h1 style={{ fontSize: '2.05rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '0.8rem' }}>Roteirizador de entregas</h1>
+                      <p style={{ color: 'var(--text-muted)', marginBottom: '1.4rem' }}>Importe sua planilha e calcule a melhor sequência.</p>
                       <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
                     </div>
                   )}
@@ -277,7 +304,7 @@ function App() {
                   {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
                     <div className="bento-card text-center">
                       <div className="loading-spinner" style={{ margin: '0 auto 1rem', width: '44px', height: '44px' }} />
-                      <h3 style={{ fontWeight: 800 }}>Processando dados da rota</h3>
+                      <h3 style={{ fontWeight: 800 }}>Calculando rota</h3>
                       <div className="progress-bar-track" style={{ height: '10px', marginTop: '1.5rem' }}>
                         <div className="progress-bar-fill" style={{ width: `${progress}%`, borderRadius: '10px' }} />
                       </div>
@@ -289,7 +316,7 @@ function App() {
                   {status === 'idle' && items.length > 0 && (
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div className="bento-card">
-                        <h3 style={{ fontWeight: 800, marginBottom: '1.25rem' }}>Configuração da rota</h3>
+                        <h3 style={{ fontWeight: 800, marginBottom: '0.85rem' }}>Configuração da rota</h3>
                         <div style={{ display: 'grid', gap: '1rem' }}>
                           <div className="config-option">
                             <span className="config-label">Objetivo da rota</span>
@@ -307,6 +334,9 @@ function App() {
                           <Button variant="p" fullWidth size="lg" onClick={startOptimization}>
                             <Zap size={20} fill="white" /> Calcular rota
                           </Button>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                            A rota será calculada por {optimizeBy === 'duration' ? 'tempo total' : 'distância total'}.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -315,6 +345,30 @@ function App() {
                   {/* Ready State - Dasboard Bento */}
                   {status === 'ready' && routeInfo && (
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="bento-card" style={{ padding: '0.85rem 0.9rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.45rem' }}>
+                          <p className="config-label">Visão rápida</p>
+                          <p style={{ fontSize: '0.8rem', fontWeight: 800 }}>{deliveryProgressPercent}% concluído</p>
+                        </div>
+                        <div className="progress-bar-track" style={{ height: '8px' }}>
+                          <div className="progress-bar-fill" style={{ width: `${deliveryProgressPercent}%`, borderRadius: '8px' }} />
+                        </div>
+                        <div className="quick-overview-grid">
+                          <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
+                          <span>Entregues: <b>{deliveryStats.done}</b></span>
+                          <span>Pendentes: <b>{deliveryStats.pending}</b></span>
+                        </div>
+                      </div>
+
+                      {!currentItem && (
+                        <div className="bento-card">
+                          <p style={{ fontWeight: 800 }}>Rota concluída</p>
+                          <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            Todas as paradas foram marcadas como entregues.
+                          </p>
+                        </div>
+                      )}
+
                       {currentItem && (
                         <div className="bento-card">
                           <p className="config-label">Próxima parada</p>
@@ -345,13 +399,15 @@ function App() {
                         }}
                       />
 
-                      <Button variant="o" fullWidth onClick={() => setStatus('idle')}>
-                        <RefreshCw size={16} /> Recalcular rota
-                      </Button>
-                      <Button variant="outline" fullWidth onClick={saveCurrentRoute}>
-                        Salvar no histórico
-                      </Button>
-                      <Button variant="outline" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
+                      <div className="secondary-actions-row">
+                        <Button variant="o" size="sm" fullWidth onClick={() => setStatus('idle')}>
+                          <RefreshCw size={15} /> Recalcular
+                        </Button>
+                        <Button variant="outline" size="sm" fullWidth onClick={saveCurrentRoute}>
+                          Salvar
+                        </Button>
+                      </div>
+                      <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
                         {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
                       </Button>
                       {showRouteSummary && (
@@ -375,6 +431,11 @@ function App() {
                               <p style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: 700, marginTop: '0.2rem' }}>
                                 Economia: {savedKm !== null ? `${savedKm.toFixed(1)} km` : '--'} e {savedMin !== null ? `${savedMin} min` : '--'}
                               </p>
+                              {routeQuality && (
+                                <p style={{ fontSize: '0.72rem', color: routeQuality.tone === 'success' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 700, marginTop: '0.2rem' }}>
+                                  Qualidade da otimização: {routeQuality.label}
+                                </p>
+                              )}
                             </div>
                           )}
                         </div>
@@ -467,7 +528,7 @@ function App() {
             disabled={!currentItem && status !== 'idle'}
           >
             {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
-            {status === 'ready' ? 'Navegar' : 'Otimizar'}
+            {status === 'ready' ? 'Ir p/ próxima' : 'Calcular rota'}
           </button>
 
           <button

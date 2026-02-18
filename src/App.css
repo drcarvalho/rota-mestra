@@ -230,6 +230,16 @@ header {
   background: var(--primary-hover);
 }
 
+.btn-success {
+  background: var(--success);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(var(--success-rgb), 0.24);
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #0f9f73;
+}
+
 .btn-outline,
 .btn-o {
   background: transparent;
@@ -325,10 +335,12 @@ header {
 .status-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border-radius: 999px;
   padding: 0.2rem 0.55rem;
   font-size: 0.7rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .status-badge-success {
@@ -738,6 +750,46 @@ header {
   padding: 1rem;
 }
 
+.delivery-kpi-grid {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.delivery-kpi-grid span {
+  background: rgba(var(--bg-rgb), 0.65);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.quick-overview-grid {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.quick-overview-grid span {
+  background: rgba(var(--bg-rgb), 0.55);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0.32rem 0.4rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.secondary-actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
 .animate-slide-up {
   animation: fadeIn 0.3s ease forwards;
 }
@@ -857,8 +909,10 @@ header {
   flex-direction: column;
   gap: 0.12rem;
   font-size: 0.7rem;
+  line-height: 1;
   font-weight: 900;
   box-shadow: 0 8px 22px rgba(var(--primary-rgb), 0.3);
+  padding: 0.2rem 0.35rem;
 }
 
 .nav-action-center:disabled {
@@ -954,6 +1008,24 @@ header {
   gap: 0.5rem;
 }
 
+.route-stop-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.route-stop-mini-btn {
+  min-height: 34px;
+  padding: 0.35rem 0.4rem;
+  font-size: 0.72rem;
+}
+
+.route-external-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
 .route-stop-number {
   width: 24px;
   height: 24px;
@@ -987,6 +1059,15 @@ header {
 }
 
 @media (max-width: 1024px) {
+  .top-glass {
+    height: 64px;
+    padding: 0 0.7rem;
+  }
+
+  .brand-text {
+    font-size: 0.98rem;
+  }
+
   .main-viewport {
     display: block;
   }
@@ -1005,6 +1086,22 @@ header {
   }
 
   .app-shell {
-    padding-bottom: 86px;
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+
+  .route-stop-actions {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .delivery-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .route-external-actions {
+    grid-template-columns: 1fr;
   }
 }

@@ -1,5 +1,21 @@
 import { useEffect, useState } from 'react';
 
+const safeStorageRead = (key) => {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+};
+
+const safeStorageWrite = (key, value) => {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // Storage can fail in private mode or when quota is exceeded.
+    }
+};
+
 export const useWorkspacePersistence = ({
     storageKey,
     items,
@@ -18,7 +34,7 @@ export const useWorkspacePersistence = ({
     setStatus
 }) => {
     useEffect(() => {
-        const savedWorkspace = localStorage.getItem(storageKey);
+        const savedWorkspace = safeStorageRead(storageKey);
         if (!savedWorkspace) return;
 
         try {
@@ -58,7 +74,7 @@ export const useWorkspacePersistence = ({
             stopStatuses,
             status: status === 'ready' ? 'ready' : 'idle'
         };
-        localStorage.setItem(storageKey, JSON.stringify(payload));
+        safeStorageWrite(storageKey, JSON.stringify(payload));
     }, [
         storageKey,
         items,
@@ -73,7 +89,12 @@ export const useWorkspacePersistence = ({
 
 export const useRouteHistory = (historyKey) => {
     const [routeHistory, setRouteHistory] = useState(() => {
-        const savedHistory = localStorage.getItem(historyKey);
+        let savedHistory = null;
+        try {
+            savedHistory = localStorage.getItem(historyKey);
+        } catch {
+            savedHistory = null;
+        }
         if (!savedHistory) return [];
         try {
             const parsed = JSON.parse(savedHistory);
@@ -86,7 +107,11 @@ export const useRouteHistory = (historyKey) => {
 
     const persistHistory = (nextHistory) => {
         setRouteHistory(nextHistory);
-        localStorage.setItem(historyKey, JSON.stringify(nextHistory));
+        try {
+            localStorage.setItem(historyKey, JSON.stringify(nextHistory));
+        } catch {
+            // noop
+        }
     };
 
     return { routeHistory, persistHistory };

@@ -12,6 +12,7 @@ const Button = ({
     const variantMap = {
         primary: 'btn-primary',
         p: 'btn-primary',
+        success: 'btn-success',
         outline: 'btn-outline',
         o: 'btn-outline',
         danger: 'btn-danger'

@@ -1,4 +1,4 @@
-// Automated Test Script for RotaMestra Logic
+// Teste automatizado da lógica principal de otimização.
 const { optimizeRoute } = require('./src/utils/optimizer.js');
 
 // Mock data: Points in Bauru
@@ -9,12 +9,11 @@ const mockItems = [
 ];
 
 async function testOptimizer() {
-    console.log('🧪 Iniciando Teste de Lógica do Otimizador...');
+    console.log('Iniciando teste de lógica do otimizador...');
 
     try {
         // We Mock the fetch for OSRM
         global.fetch = async (url) => {
-            console.log(`🔗 Mocking API: ${url}`);
             if (url.includes('/route/')) {
                 return {
                     ok: true,
@@ -66,20 +65,32 @@ async function testOptimizer() {
             };
         };
 
-        const result = await optimizeRoute(mockItems, { roundTrip: false, startIndex: 0 });
+        const resultDistance = await optimizeRoute(mockItems, { roundTrip: false, startIndex: 0, optimizeBy: 'distance' });
+        const resultDuration = await optimizeRoute(mockItems, { roundTrip: false, startIndex: 0, optimizeBy: 'duration' });
 
-        console.log('✅ Teste de Ordenação Concluído!');
-        console.log(`Ordem esperada: 1 -> 3 -> 2`);
-        console.log(`Ordem obtida: ${result.orderedItems.map(i => i.id).join(' -> ')}`);
+        const orderDistance = resultDistance.orderedItems.map(i => i.id).join(' -> ');
+        const orderDuration = resultDuration.orderedItems.map(i => i.id).join(' -> ');
 
-        if (result.orderedItems[1].id === 3) {
-            console.log('🌟 SUCESSO: Algoritmo de roteamento está integrando corretamente com a lógica OSRM!');
-        } else {
-            throw new Error('Falha na ordenação dos pontos.');
+        console.log(`Ordem (distância): ${orderDistance}`);
+        console.log(`Ordem (tempo): ${orderDuration}`);
+
+        if (resultDistance.orderedItems[1].id !== 3) {
+            throw new Error('Falha na ordenação por distância.');
+        }
+        if (resultDuration.orderedItems[1].id !== 3) {
+            throw new Error('Falha na ordenação por tempo.');
+        }
+        if (!resultDistance.baseline || !Number.isFinite(resultDistance.baseline.distance)) {
+            throw new Error('Baseline de distância não foi calculada.');
+        }
+        if (!resultDuration.baseline || !Number.isFinite(resultDuration.baseline.duration)) {
+            throw new Error('Baseline de duração não foi calculada.');
         }
 
+        console.log('Teste concluído com sucesso.');
+
     } catch (err) {
-        console.error('❌ FALHA NO TESTE:', err.message);
+        console.error('Falha no teste:', err.message);
         process.exit(1);
     }
 }

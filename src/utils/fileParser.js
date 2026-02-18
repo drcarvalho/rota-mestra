@@ -1,47 +1,59 @@
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
-
 /**
  * Professional File Parser
  * Supports: CSV, XLSX, XLS
  * Features: Auto-column detection, Lat/Lon extraction, Junk removal
  */
 export const parseFile = async (file) => {
-    return new Promise((resolve, reject) => {
-        const extension = file.name.split('.').pop().toLowerCase();
+    const extension = file.name.split('.').pop().toLowerCase();
 
-        if (extension === 'csv') {
-            Papa.parse(file, {
-                header: true,
-                skipEmptyLines: 'greedy',
-                encoding: "UTF-8",
-                complete: (results) => {
-                    if (results.errors.length > 0 && results.data.length === 0) {
-                        reject(new Error('Erro ao ler CSV: Formato inválido.'));
-                    }
-                    resolve(processData(results.data));
-                },
-                error: (error) => reject(new Error(`Erro no PapaParse: ${error.message}`)),
-            });
-        } else if (extension === 'xlsx' || extension === 'xls') {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    const jsonData = parseExcelRows(worksheet);
-                    resolve(processData(jsonData));
-                } catch {
-                    reject(new Error('Erro ao processar Excel. Verifique se o arquivo não está protegido.'));
+    if (extension === 'csv') {
+        return parseCsvFile(file);
+    }
+
+    if (extension === 'xlsx' || extension === 'xls') {
+        return parseExcelFile(file);
+    }
+
+    throw new Error('Formato não suportado. Use .csv ou .xlsx');
+};
+
+const parseCsvFile = async (file) => {
+    const { default: Papa } = await import('papaparse');
+    return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: 'greedy',
+            encoding: 'UTF-8',
+            complete: (results) => {
+                if (results.errors.length > 0 && results.data.length === 0) {
+                    reject(new Error('Erro ao ler CSV: Formato inválido.'));
+                    return;
                 }
-            };
-            reader.onerror = () => reject(new Error('Falha na leitura do arquivo.'));
-            reader.readAsArrayBuffer(file);
-        } else {
-            reject(new Error('Formato não suportado. Use .csv ou .xlsx'));
-        }
+                resolve(processData(results.data));
+            },
+            error: (error) => reject(new Error(`Erro no CSV: ${error.message}`))
+        });
+    });
+};
+
+const parseExcelFile = async (file) => {
+    const XLSX = await import('xlsx');
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = parseExcelRows(worksheet, XLSX);
+                resolve(processData(jsonData));
+            } catch {
+                reject(new Error('Erro ao processar Excel. Verifique se o arquivo não está protegido.'));
+            }
+        };
+        reader.onerror = () => reject(new Error('Falha na leitura do arquivo.'));
+        reader.readAsArrayBuffer(file);
     });
 };
 
@@ -70,7 +82,7 @@ const isLikelyAddressHeader = (value) => {
     return /(endereco|endereço|address|destino|logradouro|local)/.test(text);
 };
 
-const parseExcelRows = (worksheet) => {
+const parseExcelRows = (worksheet, XLSX) => {
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
     if (jsonData.length === 0) return [];
 
