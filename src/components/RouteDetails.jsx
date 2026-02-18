@@ -81,22 +81,6 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', animation: 'fadeInScale 0.5s ease' }}>
-            <div className="hide-mobile" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-0.25rem' }}>
-                <Button variant="outline" size="sm" onClick={handlePrint} style={{ padding: '0.4rem 0.8rem', fontSize: '0.72rem' }}>
-                    Imprimir Manifesto
-                </Button>
-            </div>
-
-            {/* Navigation Buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <Button variant="primary" onClick={openGoogleMaps}>
-                    <ExternalLink size={17} /> Google Maps
-                </Button>
-                <Button variant="outline" onClick={openWaze}>
-                    <Navigation size={17} /> Waze
-                </Button>
-            </div>
-
             {/* Route Sequence */}
             <Card style={{ padding: '1rem' }}>
                 <SectionHeader
@@ -169,6 +153,21 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                             </div>
                         );
                     })}
+                </div>
+            </Card>
+
+            <Card style={{ padding: '0.9rem' }}>
+                <SectionHeader title="Ações de navegação" />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                    <Button variant="primary" onClick={openWaze}>
+                        <Navigation size={16} /> Abrir Waze
+                    </Button>
+                    <Button variant="outline" onClick={openGoogleMaps}>
+                        <ExternalLink size={16} /> Abrir Maps
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }}>
+                        Imprimir manifesto
+                    </Button>
                 </div>
             </Card>
         </div>
