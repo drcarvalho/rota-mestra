@@ -6,16 +6,24 @@ const Button = ({
     size = 'md',
     fullWidth = false,
     className = '',
+    style = {},
     ...props
 }) => {
-    const base = 'btn';
-    const variantClass = `btn-${variant}`;
+    const variantMap = {
+        primary: 'btn-primary',
+        p: 'btn-primary',
+        outline: 'btn-outline',
+        o: 'btn-outline',
+        danger: 'btn-danger'
+    };
     const sizeClass = size === 'sm' ? 'btn-sm' : size === 'lg' ? 'btn-lg' : '';
     const widthClass = fullWidth ? 'btn-full' : '';
+    const variantClass = variantMap[variant] || 'btn-outline';
 
     return (
         <button
-            className={[base, variantClass, sizeClass, widthClass, className].filter(Boolean).join(' ')}
+            className={['btn', variantClass, sizeClass, widthClass, className].filter(Boolean).join(' ')}
+            style={style}
             {...props}
         >
             {children}

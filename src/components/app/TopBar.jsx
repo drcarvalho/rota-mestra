@@ -30,10 +30,14 @@ const TopBar = ({
             <div className="topbar-shell">
                 <div className="brand-row">
                     <div className="brand-icon">
-                        <Truck size={24} strokeWidth={2.5} />
+                        <Truck size={22} strokeWidth={2.5} />
                     </div>
                     <div className="hide-mobile">
-                        <h1 className="brand-title">RotaMestra <span className="brand-title-sub">Pro</span></h1>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <h1 className="brand-title">RotaMestra <span className="brand-title-sub">Pro</span></h1>
+                            <span className="version-tag">v2.0</span>
+                        </div>
+                        <p className="brand-subtitle">Otimizador de Rotas Inteligente</p>
                     </div>
                 </div>
 
@@ -58,30 +62,30 @@ const TopBar = ({
                     )}
 
                     <div className="topbar-tabs">
-                        <button className={`btn btn-icon ${activeTab === 'optimizer' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('optimizer')} aria-label="Aba otimizador">
-                            <LayoutDashboard size={18} />
+                        <button className={`btn btn-icon ${activeTab === 'optimizer' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('optimizer')} aria-label="Aba otimizador" title="Otimizador">
+                            <LayoutDashboard size={17} />
                         </button>
-                        <button className={`btn btn-icon ${activeTab === 'settings' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('settings')} aria-label="Aba preferências">
-                            <SettingsIcon size={18} />
+                        <button className={`btn btn-icon ${activeTab === 'settings' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('settings')} aria-label="Aba preferências" title="Preferências">
+                            <SettingsIcon size={17} />
                         </button>
-                        <button className={`btn btn-icon ${activeTab === 'history' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('history')} aria-label="Aba histórico">
-                            <History size={18} />
+                        <button className={`btn btn-icon ${activeTab === 'history' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('history')} aria-label="Aba histórico" title="Histórico">
+                            <History size={17} />
                         </button>
                     </div>
 
-                    <button className="btn btn-outline btn-icon" onClick={toggleTheme} style={{ borderRadius: '12px' }} aria-label="Alternar tema">
-                        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                    <button className="btn btn-outline btn-icon" onClick={toggleTheme} style={{ borderRadius: '12px' }} aria-label="Alternar tema" title={isDarkMode ? 'Modo claro' : 'Modo escuro'}>
+                        {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
                     </button>
 
                     {status === 'ready' && (
-                        <button className={`btn ${isFieldMode ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsFieldMode((v) => !v)} style={{ borderRadius: '12px' }}>
-                            <LocateFixed size={18} /> <span className="hide-mobile">Modo Campo</span>
+                        <button className={`btn ${isFieldMode ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsFieldMode((v) => !v)} style={{ borderRadius: '12px' }} title="Modo motorista em campo">
+                            <LocateFixed size={17} /> <span className="hide-mobile">Modo Campo</span>
                         </button>
                     )}
 
                     {!isMobileViewport && itemsLength > 0 && (
                         <Button variant="danger" onClick={onReset} style={{ borderRadius: '12px' }}>
-                            <Trash2 size={18} /> <span className="hide-mobile">Limpar</span>
+                            <Trash2 size={17} /> <span className="hide-mobile">Limpar</span>
                         </Button>
                     )}
                 </div>

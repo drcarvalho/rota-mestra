@@ -1,289 +1,145 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
-  Play,
-  RefreshCw,
-  Calculator,
-  AlertTriangle,
-  Navigation,
-  Wifi,
-  WifiOff
+  Play, RefreshCw, Navigation, Zap, Map as MapIcon,
+  Truck, LayoutGrid, Settings as SettingsIcon,
+  Sun, Moon
 } from 'lucide-react';
+
 import { parseFile } from './utils/fileParser';
 import { geocodeBatch } from './utils/geocoding';
 import { optimizeRoute } from './utils/optimizer';
+
 import FileUploader from './components/FileUploader';
 import RouteDetails from './components/RouteDetails';
 import Button from './components/ui/Button';
-import Card from './components/ui/Card';
-import StatusBadge from './components/ui/StatusBadge';
-import TopBar from './components/app/TopBar';
 import HistoryPanel from './components/app/HistoryPanel';
 import SettingsPanel from './components/app/SettingsPanel';
 import { useWorkspacePersistence, useRouteHistory } from './hooks/useRoutePersistence';
-import './App.css';
 import confetti from 'canvas-confetti';
+import './App.css';
 
 const MapView = lazy(() => import('./components/MapView'));
 
-const WORKSPACE_STORAGE_KEY = 'rota_mestra_workspace_v1';
-const ROUTE_HISTORY_STORAGE_KEY = 'rota_mestra_history_v1';
-
-const haversineKm = (c1, c2) => {
-  if (!c1 || !c2) return 0;
-  const R = 6371;
-  const dLat = (c2.lat - c1.lat) * Math.PI / 180;
-  const dLon = (c2.lon - c1.lon) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(c1.lat * Math.PI / 180) * Math.cos(c2.lat * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
-const getHaversineDistance = (routeItems, roundTrip = false) => {
-  if (!Array.isArray(routeItems) || routeItems.length < 2) return 0;
-  let total = 0;
-  for (let i = 0; i < routeItems.length - 1; i++) {
-    total += haversineKm(routeItems[i].coords, routeItems[i + 1].coords);
-  }
-  if (roundTrip) total += haversineKm(routeItems[routeItems.length - 1].coords, routeItems[0].coords);
-  return total;
-};
-
-const buildInitialStopStatuses = (routeItems) => {
-  const statuses = {};
-  routeItems.forEach((item, idx) => {
-    statuses[String(item.id)] = idx === 0 ? 'done' : 'pending';
-  });
-  return statuses;
-};
+const WORKSPACE_KEY = 'rota_mestra_v4_elite';
+const HISTORY_KEY = 'rota_mestra_v4_history';
+const hasValidCoords = (item) => Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
+const buildInitialStopStatuses = (routeItems) => routeItems.reduce((acc, item, idx) => {
+  acc[String(item.id)] = idx === 0 ? 'done' : 'pending';
+  return acc;
+}, {});
 
 function App() {
-  const hasValidCoords = (item) =>
-    Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
-
-  const sidebarRef = useRef(null);
-  const mapRef = useRef(null);
+  const initialTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') || 'light' : 'light';
   const [items, setItems] = useState([]);
-  const [status, setStatus] = useState('idle'); // idle, uploading, geocoding, optimizing, ready
+  const [status, setStatus] = useState('idle');
   const [progress, setProgress] = useState(0);
   const [routeInfo, setRouteInfo] = useState(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(initialTheme === 'dark');
   const [roundTrip, setRoundTrip] = useState(false);
   const [startPointId, setStartPointId] = useState(null);
-  const [optimizeBy, setOptimizeBy] = useState('distance'); // distance, duration
+  const [optimizeBy, setOptimizeBy] = useState('distance');
   const [stopStatuses, setStopStatuses] = useState({});
-  const [isFieldMode, setIsFieldMode] = useState(false);
-  const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
-  const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth <= 900 : false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
   const [mobileView, setMobileView] = useState('panel'); // panel, map
-  const [toast, setToast] = useState(null); // { message, type }
-  const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('optimizer'); // optimizer, settings, history
-  const { routeHistory, persistHistory } = useRouteHistory(ROUTE_HISTORY_STORAGE_KEY);
+  const [toast, setToast] = useState(null);
+  const [activeTab, setActiveTab] = useState('optimizer');
 
-  // Theme Management
+  const { routeHistory, persistHistory } = useRouteHistory(HISTORY_KEY);
+
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    setIsDarkMode(savedTheme === 'dark');
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const resizer = () => setIsMobile(window.innerWidth <= 1024);
+    window.addEventListener('resize', resizer);
+    return () => window.removeEventListener('resize', resizer);
   }, []);
 
   useWorkspacePersistence({
-    storageKey: WORKSPACE_STORAGE_KEY,
-    items,
-    routeInfo,
-    roundTrip,
-    startPointId,
-    optimizeBy,
-    stopStatuses,
-    status,
-    setItems,
-    setRouteInfo,
-    setRoundTrip,
-    setStartPointId,
-    setOptimizeBy,
-    setStopStatuses,
-    setStatus
+    storageKey: WORKSPACE_KEY,
+    items, routeInfo, roundTrip, startPointId, optimizeBy, stopStatuses, status,
+    setItems, setRouteInfo, setRoundTrip, setStartPointId, setOptimizeBy, setStopStatuses, setStatus
   });
 
-  useEffect(() => {
-    const goOnline = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
-    const onResize = () => setIsMobileViewport(window.innerWidth <= 900);
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('online', goOnline);
-      window.removeEventListener('offline', goOffline);
-      window.removeEventListener('resize', onResize);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isMobileViewport) return;
-    if (status === 'ready') {
-      setMobileView('panel');
-      setIsFieldMode(false);
-    }
-  }, [isMobileViewport, status]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (message, type = 'info') => setToast({ message, type });
-
-  const toggleTheme = () => {
-    const newTheme = !isDarkMode ? 'dark' : 'light';
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  // Upload Logic
-  const handleFileUpload = useCallback(async (file) => {
-    try {
-      setError(null);
-      setStatus('uploading');
-      const data = await parseFile(file);
-      if (data.length === 0) throw new Error('O arquivo parece estar vazio ou sem colunas de endereço identificáveis.');
-      setItems(data);
-      setStartPointId(data[0]?.id ?? null);
-      setStopStatuses({});
-      setIsFieldMode(false);
-      setStatus('idle');
-    } catch (err) {
-      setError(err.message);
-      setStatus('idle');
-    }
-  }, []);
-
-  // Main Processing Engine
-  const runRouteOptimizer = async () => {
-    if (items.length === 0) return;
-    setError(null);
-    setProgress(0);
-
-    try {
-      // Phase 1: Geocoding (if needed)
-      const needsGeocoding = items.filter((i) => !hasValidCoords(i));
-      let geocodedList = [...items];
-
-      if (needsGeocoding.length > 0) {
-        setStatus('geocoding');
-        const results = await geocodeBatch(items, (current, total) => {
-          setProgress(Math.round((current / total) * 100));
-        });
-        geocodedList = results;
-      }
-
-      const successfulItems = geocodedList.filter((item) => item.status === 'success' || hasValidCoords(item));
-      if (successfulItems.length === 0) {
-        throw new Error('Não foi possível localizar nenhum dos endereços no mapa. Verifique a ortografia.');
-      }
-
-      // Phase 2: Route Optimization (TSP)
-      setStatus('optimizing');
-      setProgress(50);
-      const startIndexFromId = successfulItems.findIndex(item => String(item.id) === String(startPointId));
-      const safeStartIndex = startIndexFromId >= 0 ? startIndexFromId : 0;
-      const optimized = await optimizeRoute(successfulItems, {
-        roundTrip,
-        startIndex: safeStartIndex,
-        optimizeBy
-      });
-      const baselineKm = getHaversineDistance(successfulItems, roundTrip);
-      const optimizedKm = getHaversineDistance(optimized.orderedItems, roundTrip);
-      const gainRatio = baselineKm > 0 ? ((baselineKm - optimizedKm) / baselineKm) * 100 : 0;
-      const roadBaseline = optimized?.meta?.baselineCost;
-      const roadSelected = optimized?.meta?.selectedCost;
-      const roadGainPercent = Number.isFinite(roadBaseline) && roadBaseline > 0 && Number.isFinite(roadSelected)
-        ? Math.max(0, ((roadBaseline - roadSelected) / roadBaseline) * 100)
-        : null;
-      setProgress(100);
-
-      setItems(optimized.orderedItems);
-      setRouteInfo({
-        ...optimized,
-        quality: {
-          baselineKm,
-          optimizedKm,
-          gainPercent: Math.max(0, gainRatio),
-          roadGainPercent
-        }
-      });
-      setStopStatuses(buildInitialStopStatuses(optimized.orderedItems));
-      setStatus('ready');
-      if (isMobileViewport) setMobileView('map');
-
-      // Success Event
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        ticks: 200,
-        colors: ['#2563eb', '#10b981', '#60a5fa']
-      });
-
-    } catch (err) {
-      setError(err.message);
-      setStatus('idle');
-      console.error('Core Logic Failure:', err);
-    }
-  };
-
-  const resetProject = () => {
-    if (window.confirm('Deseja limpar todos os dados e começar de novo?')) {
-      setItems([]);
-      setRouteInfo(null);
-      setStartPointId(null);
-      setOptimizeBy('distance');
-      setStopStatuses({});
-      setStatus('idle');
-      setProgress(0);
-      setError(null);
-      setMobileView('panel');
-      localStorage.removeItem(WORKSPACE_STORAGE_KEY);
-    }
-  };
-
-  const clearSavedWorkspace = () => {
-    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+  const resetWorkspace = () => {
     setItems([]);
+    setStatus('idle');
+    setProgress(0);
     setRouteInfo(null);
     setRoundTrip(false);
     setStartPointId(null);
     setOptimizeBy('distance');
     setStopStatuses({});
-    setStatus('idle');
+    setMobileView('panel');
+    localStorage.removeItem(WORKSPACE_KEY);
+    showToast('Sessão reiniciada.', 'info');
+  };
+
+  const toggleTheme = () => {
+    const nextTheme = !isDarkMode ? 'dark' : 'light';
+    setIsDarkMode(!isDarkMode);
+    localStorage.setItem('theme', nextTheme);
+  };
+
+  const handleUpload = async (file) => {
+    try {
+      setStatus('uploading');
+      const data = await parseFile(file);
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('Arquivo sem dados válidos.');
+      }
+      setItems(data);
+      setStartPointId(data[0]?.id ?? null);
+      setStopStatuses({});
+      setStatus('idle');
+      showToast('Dados consolidados!', 'success');
+    } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
+  };
+
+  const startOptimization = async () => {
+    if (!items.length) return;
     setProgress(0);
-    setError(null);
-    showToast('Sessão local removida.', 'success');
+    setStatus('geocoding');
+    try {
+      const geo = await geocodeBatch(items, (c, t) => setProgress(Math.round((c / t) * 100)));
+      const validItems = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
+      if (!validItems.length) {
+        throw new Error('Nenhum endereço válido foi localizado.');
+      }
+
+      setStatus('optimizing');
+      const sIdx = validItems.findIndex(i => String(i.id) === String(startPointId));
+      const res = await optimizeRoute(validItems, { roundTrip, startIndex: sIdx >= 0 ? sIdx : 0, optimizeBy });
+      setProgress(100);
+      setItems(res.orderedItems);
+      setRouteInfo(res);
+      setStopStatuses(buildInitialStopStatuses(res.orderedItems));
+      setStatus('ready');
+      if (isMobile) setMobileView('map');
+      confetti({ particleCount: 200, spread: 70, origin: { y: 0.7 } });
+    } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
   };
 
-  const getNextPendingIndex = () => {
-    if (!items.length) return -1;
-    for (let idx = 1; idx < items.length; idx++) {
-      const stopId = String(items[idx].id);
-      if (stopStatuses[stopId] !== 'done') return idx;
-    }
-    return -1;
+  const markStatus = (idx, s) => {
+    if (!items[idx]) return;
+    setStopStatuses(prev => ({ ...prev, [String(items[idx].id)]: s }));
+    showToast(s === 'done' ? 'Entrega concluída!' : 'Falha registrada.', s === 'done' ? 'success' : 'error');
   };
 
-  const markStopStatus = (idx, nextStatus) => {
-    const item = items[idx];
-    if (!item || idx === 0) return;
-    const stopId = String(item.id);
-    setStopStatuses((current) => ({ ...current, [stopId]: nextStatus }));
-    showToast(nextStatus === 'done' ? 'Entrega marcada como concluída.' : 'Entrega marcada como falha.', nextStatus === 'done' ? 'success' : 'error');
+  const currentIdx = items.findIndex((it, i) => i > 0 && stopStatuses[String(it.id)] !== 'done');
+  const currentItem = currentIdx > 0 ? items[currentIdx] : null;
+  const openCurrentNavigation = () => {
+    if (!currentItem?.coords) return;
+    window.open(`https://waze.com/ul?ll=${currentItem.coords.lat},${currentItem.coords.lon}&navigate=yes`);
   };
-
-  const saveCurrentRouteToHistory = () => {
+  const saveCurrentRoute = () => {
     if (!items.length || !routeInfo) return;
     const now = new Date();
     const entry = {
@@ -296,397 +152,228 @@ function App() {
       optimizeBy,
       startPointId
     };
-    const nextHistory = [entry, ...routeHistory].slice(0, 20);
-    persistHistory(nextHistory);
+    persistHistory([entry, ...routeHistory].slice(0, 30));
     showToast('Rota salva no histórico.', 'success');
   };
 
-  const loadHistoryRoute = (entry) => {
-    setItems(entry.items || []);
-    setRouteInfo(entry.routeInfo || null);
-    setRoundTrip(Boolean(entry.roundTrip));
-    setOptimizeBy(entry.optimizeBy === 'duration' ? 'duration' : 'distance');
-    setStartPointId(entry.startPointId ?? entry.items?.[0]?.id ?? null);
-    setStopStatuses(buildInitialStopStatuses(entry.items || []));
-    setStatus(entry.routeInfo ? 'ready' : 'idle');
-    setActiveTab('optimizer');
-  };
-
-  const clearHistory = () => {
-    persistHistory([]);
-  };
-
-  const openCurrentStopNavigation = () => {
-    if (!currentStop?.coords) return;
-    const stop = `${currentStop.coords.lat},${currentStop.coords.lon}`;
-    const url = `https://waze.com/ul?ll=${stop}&navigate=yes`;
-    window.open(url, '_blank');
-    showToast('Abrindo navegação para próxima parada.', 'info');
-  };
-
-  const goToSidebar = () => {
-    if (isMobileViewport) setMobileView('panel');
-    sidebarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  const goToMap = () => {
-    if (isMobileViewport) setMobileView('map');
-    mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  const nextPendingIndex = getNextPendingIndex();
-  const currentStop = nextPendingIndex > 0 ? items[nextPendingIndex] : null;
-  const progressDone = Math.max(0, items.slice(1).filter((item) => stopStatuses[String(item.id)] === 'done').length);
-  const progressTotal = Math.max(0, items.length - 1);
-  const workflowStep = status === 'ready' ? 3 : items.length > 0 ? 2 : 1;
-  const isRouteReady = status === 'ready' && items.length > 0;
-  const canNavigateNow = isRouteReady && Boolean(currentStop?.coords);
-  const handlePrimaryMobileAction = () => {
-    if (canNavigateNow) {
-      openCurrentStopNavigation();
-      return;
-    }
-    runRouteOptimizer();
-  };
-
   return (
-    <div className="app-container">
-      <TopBar
-        isMobileViewport={isMobileViewport}
-        mobileView={mobileView}
-        setMobileView={setMobileView}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        toggleTheme={toggleTheme}
-        isDarkMode={isDarkMode}
-        status={status}
-        isFieldMode={isFieldMode}
-        setIsFieldMode={setIsFieldMode}
-        itemsLength={items.length}
-        onReset={resetProject}
-      />
-
-      <main className="main-content">
-        {/* SIDEBAR ZONE */}
-        <aside className={`sidebar-scroll ${isMobileViewport && mobileView === 'map' ? 'mobile-hidden' : ''}`} ref={sidebarRef}>
-          <Card>
-            <h4 style={{ fontWeight: 800, marginBottom: '0.75rem', fontSize: '0.9rem' }}>Fluxo da Operação</h4>
-            <div className="stepper-grid">
-              <div className={`step-chip ${workflowStep >= 1 ? 'step-chip-active' : ''}`}>1. Importar</div>
-              <div className={`step-chip ${workflowStep >= 2 ? 'step-chip-active' : ''}`}>2. Configurar</div>
-              <div className={`step-chip ${workflowStep >= 3 ? 'step-chip-active' : ''}`}>3. Navegar</div>
-            </div>
-          </Card>
-
-          {activeTab === 'history' && (
-            <HistoryPanel routeHistory={routeHistory} onClear={clearHistory} onLoad={loadHistoryRoute} />
+    <div className="app-shell">
+      <header className="top-glass">
+        <div className="brand-elite">
+          <div className="brand-icon-box"><Truck size={20} /></div>
+          <span className="brand-text">RotaMestra Pro</span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {!isMobile && (
+            <Button variant="o" style={{ width: '42px', padding: 0, borderRadius: '12px' }} onClick={toggleTheme}>
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </Button>
           )}
-
-          {activeTab === 'settings' && (
-            <SettingsPanel onClearWorkspace={clearSavedWorkspace} onClearHistory={clearHistory} />
+          {!isMobile && items.length > 0 && (
+            <Button variant="o" style={{ borderRadius: '12px' }} onClick={resetWorkspace}>
+              Reiniciar
+            </Button>
           )}
+        </div>
+      </header>
 
-          {/* 1. WELCOME & DATA INPUT */}
-          {activeTab === 'optimizer' && status === 'idle' && items.length === 0 && (
-            <div className="animate-fade-in">
-              <div style={{ marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>Importe e otimize sua rota.</h2>
-              </div>
-              <FileUploader onUpload={handleFileUpload} onValidationError={(message) => showToast(message, 'error')} />
-            </div>
-          )}
+      <main className="main-viewport">
+        {/* SIDE PANEL (Panel view on mobile) */}
+        <aside className={`side-panel ${isMobile && mobileView === 'map' ? 'hidden' : ''}`}>
+          <div className="bento-scroll">
+            <>
+              {activeTab === 'optimizer' && (
+                <div key="opt">
 
-          {/* 2. ERROR BOUNDARY UI */}
-          {activeTab === 'optimizer' && error && (
-            <div className="card animate-fade-in" style={{ border: '1px solid var(--error)', background: 'var(--error-light)' }}>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <AlertTriangle color="var(--error)" size={20} />
-                <div>
-                  <h4 style={{ color: 'var(--error)', fontWeight: 700 }}>Erro no processamento</h4>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginTop: '4px' }}>{error}</p>
-                </div>
-              </div>
-              <button className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', background: 'var(--error)' }} onClick={() => setError(null)}>
-                Tentar novamente
-              </button>
-            </div>
-          )}
-
-          {/* 3. LOADING & PROGRESS */}
-          {activeTab === 'optimizer' && (status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
-            <div className="card animate-fade-in">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                <div>
-                  <h3 style={{ fontWeight: 800 }}>{status === 'geocoding' ? 'Geocodificando endereços' : status === 'optimizing' ? 'Otimizando rota' : 'Processando arquivo'}</h3>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Processamento em andamento</p>
-                </div>
-                <div className="loading-spinner" />
-              </div>
-
-              <div style={{ background: 'var(--border)', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
-                <div style={{
-                  background: 'linear-gradient(90deg, var(--primary), #60a5fa)',
-                  height: '100%',
-                  width: `${progress}%`,
-                  transition: 'width 0.5s ease-out'
-                }} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>{progress}% Concluído</span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{items.length} pontos</span>
-              </div>
-            </div>
-          )}
-
-          {/* 4. SETTINGS & PRE-CALCULATION */}
-          {activeTab === 'optimizer' && items.length > 0 && status === 'idle' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="card">
-                <div style={{ marginBottom: '1rem' }}>
-                  <h3 style={{ fontWeight: 800 }}>Configurar rota</h3>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div className="card" style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Objetivo da Otimização</span>
-                      <select
-                        value={optimizeBy}
-                        onChange={(e) => setOptimizeBy(e.target.value)}
-                        style={{
-                          border: '1px solid var(--border)',
-                          borderRadius: '10px',
-                          padding: '0.625rem 0.75rem',
-                          background: 'var(--card)',
-                          color: 'var(--text-main)',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        <option value="distance">Menor Distância (km)</option>
-                        <option value="duration">Menor Tempo (min)</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="card" style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Ponto de Partida</span>
-                      <select
-                        value={startPointId ?? ''}
-                        onChange={(e) => setStartPointId(e.target.value)}
-                        style={{
-                          border: '1px solid var(--border)',
-                          borderRadius: '10px',
-                          padding: '0.625rem 0.75rem',
-                          background: 'var(--card)',
-                          color: 'var(--text-main)',
-                          fontSize: '0.85rem'
-                        }}
-                      >
-                        {items.map((item, idx) => (
-                          <option key={item.id || idx} value={String(item.id)}>
-                            {idx + 1}. {item.label || item.address}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="card" style={{ padding: '1rem', background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={roundTrip}
-                        onChange={(e) => setRoundTrip(e.target.checked)}
-                        style={{ width: '20px', height: '20px', accentColor: 'var(--primary)' }}
-                      />
-                      <div>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Retornar ao Início</span>
+                  {/* Empty State / Hero */}
+                  {status === 'idle' && items.length === 0 && (
+                    <div className="animate-slide-up" style={{ padding: '2rem 0', textAlign: 'center' }}>
+                      <div style={{ marginBottom: '1.5rem', display: 'inline-flex', padding: '8px 16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--p-600)', fontWeight: 700, fontSize: '0.85rem' }}>
+                        LOGÍSTICA INTELIGENTE v4
                       </div>
-                    </label>
-                  </div>
-                </div>
-
-                <button className="btn btn-primary mobile-main-action" onClick={runRouteOptimizer} style={{ width: '100%', marginTop: '1.25rem', padding: '1.25rem' }}>
-                  <Calculator size={22} /> OTIMIZAR ROTA
-                </button>
-              </div>
-
-            </div>
-          )}
-
-          {/* 5. FINAL RESULTS */}
-          {activeTab === 'optimizer' && status === 'ready' && routeInfo && (
-            <div className="animate-fade-in">
-              <RouteDetails
-                items={items}
-                info={routeInfo}
-                stopStatuses={stopStatuses}
-                onMarkDone={(idx) => markStopStatus(idx, 'done')}
-                onMarkFailed={(idx) => markStopStatus(idx, 'failed')}
-                onCopyAddress={async (address) => {
-                  try {
-                    await navigator.clipboard?.writeText(address || '');
-                    showToast('Endereço copiado.', 'success');
-                  } catch {
-                    showToast('Não foi possível copiar o endereço.', 'error');
-                  }
-                }}
-              />
-
-              <div className="card" style={{ marginTop: '1rem' }}>
-                <h4 style={{ fontWeight: 800, marginBottom: '0.75rem' }}>Modo Entregador</h4>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
-                  {progressDone}/{progressTotal} entregas concluídas
-                </p>
-                <div style={{ background: 'var(--border)', borderRadius: '8px', height: '10px', overflow: 'hidden', marginBottom: '0.9rem' }}>
-                  <div style={{ width: `${progressTotal > 0 ? (progressDone / progressTotal) * 100 : 0}%`, height: '100%', background: 'var(--success)', transition: 'width 0.2s ease' }} />
-                </div>
-                {currentStop ? (
-                  <div>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Próxima parada</p>
-                    <p style={{ fontWeight: 700, marginBottom: '0.75rem' }}>{currentStop.address}</p>
-                    <button className="btn btn-primary" style={{ width: '100%', marginBottom: '0.6rem' }} onClick={openCurrentStopNavigation}>
-                      <Navigation size={16} /> Abrir navegação
-                    </button>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                      <button className="btn btn-primary" onClick={() => markStopStatus(nextPendingIndex, 'done')}>Concluir</button>
-                      <button className="btn btn-outline" onClick={() => markStopStatus(nextPendingIndex, 'failed')}>Falha</button>
+                      <h1 style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>Sua frota em outro nível.</h1>
+                      <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Aumente em até 40% a eficiência das suas rotas diárias.</p>
+                      <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
                     </div>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: 700 }}>Todas as entregas concluídas.</p>
-                )}
-              </div>
+                  )}
 
-              <div className="card" style={{ marginTop: '1rem' }}>
-                <h4 style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Qualidade da Rota</h4>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Modo: <b>{routeInfo.optimizeBy === 'duration' ? 'Menor Tempo' : 'Menor Distância'}</b>
-                </p>
-                <div style={{ marginTop: '0.4rem' }}>
-                  <StatusBadge
-                    tone={routeInfo.optimizeBy === 'duration' ? 'info' : 'neutral'}
-                    label={routeInfo.optimizeBy === 'duration' ? 'Otimização por tempo' : 'Otimização por distância'}
+                  {/* Processing Status */}
+                  {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
+                    <div className="bento-card text-center">
+                      <div className="loading-spinner" style={{ margin: '0 auto 1rem', width: '44px', height: '44px' }} />
+                      <h3 style={{ fontWeight: 800 }}>Sincronizando Dados</h3>
+                      <div className="progress-bar-track" style={{ height: '10px', marginTop: '1.5rem' }}>
+                        <div className="progress-bar-fill" style={{ width: `${progress}%`, borderRadius: '10px' }} />
+                      </div>
+                      <p style={{ marginTop: '0.75rem', fontWeight: 800, color: 'var(--p-600)' }}>{progress}%</p>
+                    </div>
+                  )}
+
+                  {/* Pre-Calculation Bento Config */}
+                  {status === 'idle' && items.length > 0 && (
+                    <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="bento-card">
+                        <h3 style={{ fontWeight: 800, marginBottom: '1.25rem' }}>Definições da Rota</h3>
+                        <div style={{ display: 'grid', gap: '1rem' }}>
+                          <div className="config-option">
+                            <span className="config-label">Critério de Sucesso</span>
+                            <select value={optimizeBy} onChange={e => setOptimizeBy(e.target.value)}>
+                              <option value="distance">Distância Mínima</option>
+                              <option value="duration">Tempo Mínimo</option>
+                            </select>
+                          </div>
+                          <div className="config-option">
+                            <span className="config-label">Ponto de Partida</span>
+                            <select value={startPointId ?? ''} onChange={e => setStartPointId(e.target.value)}>
+                              {items.map((it, i) => <option key={it.id} value={it.id}>{i + 1}. {it.address}</option>)}
+                            </select>
+                          </div>
+                          <Button variant="p" fullWidth style={{ height: '60px', fontSize: '1.1rem' }} onClick={startOptimization}>
+                            <Zap size={20} fill="white" /> OTIMIZAR AGORA
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ready State - Dasboard Bento */}
+                  {status === 'ready' && routeInfo && (
+                    <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <RouteDetails
+                        items={items}
+                        info={routeInfo}
+                        stopStatuses={stopStatuses}
+                        onMarkDone={idx => markStatus(idx, 'done')}
+                        onMarkFailed={idx => markStatus(idx, 'failed')}
+                        onCopyAddress={async (address) => {
+                          try {
+                            await navigator.clipboard?.writeText(address || '');
+                            showToast('Endereço copiado.', 'success');
+                          } catch {
+                            showToast('Não foi possível copiar.', 'error');
+                          }
+                        }}
+                      />
+
+                      {/* Mobile Stats Dashboard */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div className="bento-card" style={{ padding: '1rem' }}>
+                          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)' }}>ECONOMIA</p>
+                          <p style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>{routeInfo.quality?.gainPercent.toFixed(1)}%</p>
+                        </div>
+                        <div className="bento-card" style={{ padding: '1rem' }}>
+                          <p style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)' }}>ENTREGAS</p>
+                          <p style={{ fontSize: '1.4rem', fontWeight: 800 }}>{items.length}</p>
+                        </div>
+                      </div>
+
+                      <Button variant="o" fullWidth onClick={() => setStatus('idle')}>
+                        <RefreshCw size={16} /> Ajustar Rota
+                      </Button>
+                      <Button variant="outline" fullWidth onClick={saveCurrentRoute}>
+                        Salvar no histórico
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'history' && (
+                <div key="hist">
+                  <HistoryPanel routeHistory={routeHistory} onClear={() => persistHistory([])} onLoad={(l) => {
+                    setItems(l.items || []);
+                    setRouteInfo(l.routeInfo || null);
+                    setRoundTrip(Boolean(l.roundTrip));
+                    setOptimizeBy(l.optimizeBy === 'duration' ? 'duration' : 'distance');
+                    setStartPointId(l.startPointId ?? l.items?.[0]?.id ?? null);
+                    setStopStatuses(buildInitialStopStatuses(l.items || []));
+                    setStatus(l.routeInfo ? 'ready' : 'idle');
+                    setActiveTab('optimizer');
+                  }} />
+                </div>
+              )}
+
+              {activeTab === 'settings' && (
+                <div key="set">
+                  <SettingsPanel
+                    onClearWorkspace={resetWorkspace}
+                    onClearHistory={() => persistHistory([])}
+                    onOpenHistory={() => setActiveTab('history')}
+                    onBackToOptimizer={() => setActiveTab('optimizer')}
+                    onToggleTheme={toggleTheme}
+                    isDarkMode={isDarkMode}
                   />
                 </div>
-                {routeInfo.quality && (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                    Ganho da rota: <b>{routeInfo.quality.gainPercent.toFixed(1)}%</b>
-                  </p>
-                )}
-                <button className="btn btn-outline" style={{ width: '100%', marginTop: '0.8rem' }} onClick={saveCurrentRouteToHistory}>
-                  Salvar no Histórico
-                </button>
-              </div>
-
-              <button className="btn btn-outline" style={{ width: '100%', marginTop: '1rem', padding: '1rem', color: 'var(--primary)', borderColor: 'var(--primary)' }} onClick={() => setStatus('idle')}>
-                <RefreshCw size={18} /> Ajustar rota
-              </button>
-            </div>
-          )}
+              )}
+            </>
+          </div>
         </aside>
 
-        {/* MAP ZONE */}
-        <section className={`map-area ${isMobileViewport && mobileView === 'panel' ? 'mobile-hidden' : ''}`} ref={mapRef}>
-          <div className="card map-container-inner" style={{ padding: 0, boxShadow: 'var(--shadow-lg)' }}>
-            <Suspense fallback={<div className="map-loading">Carregando mapa...</div>}>
-              <MapView
-                items={items}
-                routeGeometry={routeInfo?.geometry}
-                stopStatuses={stopStatuses}
-                nextStopIndex={nextPendingIndex}
-                isVisible={!(isMobileViewport && mobileView === 'panel')}
-              />
-            </Suspense>
+        {/* MAP VIEWPORT */}
+        <div className="map-viewport">
+          <Suspense fallback={<div className="loading-spinner"></div>}>
+            <MapView items={items} routeGeometry={routeInfo?.geometry} stopStatuses={stopStatuses} nextStopIndex={currentIdx} isVisible={!(isMobile && mobileView === 'panel')} />
+          </Suspense>
 
-            {/* Floating Map Overlay */}
-            <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 1000, pointerEvents: 'none' }}>
-              <div className="card hide-mobile" style={{ background: 'rgba(var(--card-bg-rgb, 255, 255, 255), 0.9)', backdropFilter: 'blur(8px)', padding: '0.75rem 1rem', border: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--success)' }} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>Sistema ativo</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '8px' }}>Bauru / SP</span>
-                  <span style={{ marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    {isOnline ? <Wifi size={12} color="#059669" /> : <WifiOff size={12} color="#dc2626" />}
-                    <StatusBadge tone={isOnline ? 'success' : 'error'} label={isOnline ? 'Online' : 'Offline'} />
-                  </span>
-                </div>
+          {/* Floating Mobile Map HUD */}
+          {isMobile && mobileView === 'map' && status === 'ready' && currentItem && (
+            <div className="hud-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <div className="status-glow" style={{ background: 'var(--p-500)' }} />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PRÓXIMA ENTREGA</span>
+              </div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1.25rem' }}>{currentItem.address}</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '0.75rem' }}>
+                <button className="btn-elite btn-p" onClick={() => window.open(`https://waze.com/ul?ll=${currentItem.coords.lat},${currentItem.coords.lon}&navigate=yes`)}>
+                  <Navigation size={18} fill="white" /> NAVEGAR AGORA
+                </button>
+                <button className="btn-elite btn-o" onClick={() => markStatus(currentIdx, 'done')}>
+                  CONCLUIR
+                </button>
               </div>
             </div>
-
-            {isMobileViewport && mobileView === 'map' && status === 'ready' && currentStop && !isFieldMode && (
-              <div className="driver-hud">
-                <p className="driver-hud-title">Proxima parada</p>
-                <p className="driver-hud-address">{currentStop.address}</p>
-                <div className="driver-hud-actions">
-                  <button className="btn btn-primary" onClick={openCurrentStopNavigation}>
-                    <Navigation size={18} /> Navegar
-                  </button>
-                  <button className="btn btn-outline" onClick={() => markStopStatus(nextPendingIndex, 'done')}>
-                    Concluir
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+          )}
+        </div>
       </main>
 
-      <footer className="app-footer">
-        <p>&copy; 2026 RotaMestra Pro · Planejamento de entregas de ultima milha</p>
-      </footer>
+      {/* MOBILE CRYSTAL NAVIGATION PILL */}
+      {isMobile && (
+        <nav className="mobile-nav-pill">
+          <button
+            className={`nav-item ${mobileView === 'panel' && activeTab === 'optimizer' ? 'active' : ''}`}
+            onClick={() => { setMobileView('panel'); setActiveTab('optimizer'); }}
+          >
+            <LayoutGrid size={18} />
+            Painel
+          </button>
+          <button
+            className={`nav-item ${mobileView === 'map' ? 'active' : ''}`}
+            onClick={() => setMobileView('map')}
+          >
+            <MapIcon size={18} />
+            Mapa
+          </button>
 
-      <div className="mobile-actions">
-        <button className="mobile-action-btn" onClick={goToSidebar}>
-          Painel
-        </button>
-        <button
-          className="mobile-action-btn mobile-action-primary"
-          onClick={handlePrimaryMobileAction}
-          disabled={canNavigateNow ? false : (items.length === 0 || status !== 'idle')}
-        >
-          {canNavigateNow ? <Navigation size={18} /> : <Play size={18} />}
-          {canNavigateNow ? 'Navegar' : 'Otimizar'}
-        </button>
-        <button className="mobile-action-btn" onClick={goToMap}>
-          Mapa
-        </button>
-      </div>
+          <button
+            className="nav-action-center"
+            onClick={() => (currentItem ? openCurrentNavigation() : startOptimization())}
+            disabled={!currentItem && status !== 'idle'}
+          >
+            {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
+            {status === 'ready' ? 'Navegar' : 'Otimizar'}
+          </button>
 
-      {isFieldMode && status === 'ready' && (
-        <div className="field-mode-overlay">
-          <div className="field-mode-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 900 }}>Modo motorista</h3>
-              <button className="btn btn-outline" onClick={() => setIsFieldMode(false)}>Sair</button>
-            </div>
-            <p style={{ marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              {progressDone}/{progressTotal} entregas concluídas
-            </p>
-            {currentStop ? (
-              <div style={{ marginTop: '1rem' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Próxima parada</p>
-                <p style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '0.25rem' }}>{currentStop.address}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.6rem', marginTop: '1rem' }}>
-                  <button className="btn btn-primary" style={{ minHeight: '58px', fontSize: '1.05rem' }} onClick={openCurrentStopNavigation}>
-                    <Navigation size={20} /> Abrir navegação
-                  </button>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                    <button className="btn btn-primary" style={{ minHeight: '58px', fontSize: '1rem' }} onClick={() => markStopStatus(nextPendingIndex, 'done')}>Concluir</button>
-                    <button className="btn btn-outline" style={{ minHeight: '58px', fontSize: '1rem' }} onClick={() => markStopStatus(nextPendingIndex, 'failed')}>Falha</button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p style={{ marginTop: '1rem', color: 'var(--success)', fontWeight: 800 }}>Rota concluída.</p>
-            )}
-            <p style={{ marginTop: '1rem', color: isOnline ? 'var(--success)' : 'var(--error)', fontWeight: 700, fontSize: '0.9rem' }}>
-              {isOnline ? 'Conectado' : 'Sem conexão: mudanças ficam salvas no aparelho'}
-            </p>
-          </div>
-        </div>
+          <button
+            className={`nav-item ${mobileView === 'panel' && activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => { setMobileView('panel'); setActiveTab('settings'); }}
+          >
+            <SettingsIcon size={18} />
+            Ajustes
+          </button>
+        </nav>
       )}
 
+      {/* REFINED TOAST */}
       {toast && (
         <div className={`app-toast app-toast-${toast.type}`}>
           {toast.message}

@@ -159,13 +159,24 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
                 })}
 
                 {polyline && (
-                    <Polyline
-                        positions={polyline}
-                        color="#2563eb"
-                        weight={5}
-                        opacity={0.8}
-                        dashArray="10, 10"
-                    />
+                    <>
+                        {/* Base Route Line */}
+                        <Polyline
+                            positions={polyline}
+                            color="var(--primary)"
+                            weight={6}
+                            opacity={0.3}
+                        />
+                        {/* Animated Flow Line */}
+                        <Polyline
+                            positions={polyline}
+                            color="var(--primary)"
+                            weight={5}
+                            opacity={0.8}
+                            dashArray="1, 15"
+                            className="leaflet-ant-path"
+                        />
+                    </>
                 )}
 
                 {coords.length > 0 && <ChangeView bounds={coords} />}

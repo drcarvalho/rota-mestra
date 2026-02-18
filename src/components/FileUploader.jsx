@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { FileText, CloudUpload } from 'lucide-react';
+import { FileText, CloudUpload, Upload } from 'lucide-react';
 import Card from './ui/Card';
 
 const FileUploader = ({ onUpload, onValidationError }) => {
@@ -54,50 +54,29 @@ const FileUploader = ({ onUpload, onValidationError }) => {
                 role="button"
                 tabIndex={0}
                 aria-label="Selecionar arquivo de entregas"
-                style={{
-                    border: '2px dashed var(--border)',
-                    borderColor: isDragActive ? 'var(--primary)' : 'var(--border)',
-                    borderRadius: '14px',
-                    padding: '3rem 2rem',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    background: isDragActive ? 'var(--primary-light)' : 'rgba(var(--bg-rgb, 248, 250, 252), 0.5)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                }}
+                className={`upload-zone ${isDragActive ? 'upload-zone-active' : ''}`}
             >
                 {isDragActive && (
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(37, 99, 235, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <CloudUpload size={48} className="animate-bounce" color="var(--primary)" />
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(59, 130, 246, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                        <CloudUpload size={52} style={{ animation: 'float 1.5s ease-in-out infinite' }} color="var(--primary)" />
                     </div>
                 )}
 
-                <div style={{
-                    margin: '0 auto 1.5rem',
-                    width: '64px',
-                    height: '64px',
-                    background: 'var(--primary-light)',
-                    borderRadius: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--primary)'
-                }}>
-                    <FileText size={32} />
+                <div className="upload-icon-wrapper">
+                    <Upload size={32} />
                 </div>
 
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
                     Importar arquivo de entregas
                 </h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '240px', margin: '0 auto' }}>
-                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b> ou clique para selecionar.
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '280px', margin: '0 auto', lineHeight: 1.5 }}>
+                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b> ou clique para selecionar
                 </p>
 
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '2rem' }}>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'var(--border)', padding: '4px 8px', borderRadius: '6px', color: 'var(--text-muted)' }}>CSV</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'var(--border)', padding: '4px 8px', borderRadius: '6px', color: 'var(--text-muted)' }}>XLSX</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'var(--border)', padding: '4px 8px', borderRadius: '6px', color: 'var(--text-muted)' }}>XLS</span>
+                <div className="upload-format-badges">
+                    <span className="upload-format-badge">CSV</span>
+                    <span className="upload-format-badge">XLSX</span>
+                    <span className="upload-format-badge">XLS</span>
                 </div>
 
                 <input
