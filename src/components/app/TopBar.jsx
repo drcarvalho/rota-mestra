@@ -37,7 +37,7 @@ const TopBar = ({
                             <h1 className="brand-title">RotaBoa</h1>
                             <span className="version-tag">v2.0</span>
                         </div>
-                        <p className="brand-subtitle">Otimizador de Rotas Inteligente</p>
+                        <p className="brand-subtitle">Rota de entregas do dia</p>
                     </div>
                 </div>
 
@@ -45,6 +45,7 @@ const TopBar = ({
                     {isMobileViewport && (
                         <div className="mobile-view-toggle">
                             <button
+                                type="button"
                                 className={`mobile-view-btn ${mobileView === 'panel' ? 'mobile-view-btn-active' : ''}`}
                                 onClick={() => setMobileView('panel')}
                                 aria-label="Abrir painel"
@@ -52,6 +53,7 @@ const TopBar = ({
                                 Painel
                             </button>
                             <button
+                                type="button"
                                 className={`mobile-view-btn ${mobileView === 'map' ? 'mobile-view-btn-active' : ''}`}
                                 onClick={() => setMobileView('map')}
                                 aria-label="Abrir mapa"
@@ -62,24 +64,24 @@ const TopBar = ({
                     )}
 
                     <div className="topbar-tabs">
-                        <button className={`btn btn-icon ${activeTab === 'optimizer' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('optimizer')} aria-label="Aba otimizador" title="Otimizador">
+                        <button type="button" className={`btn btn-icon ${activeTab === 'optimizer' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('optimizer')} aria-label="Aba início" title="Início">
                             <LayoutDashboard size={17} />
                         </button>
-                        <button className={`btn btn-icon ${activeTab === 'settings' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('settings')} aria-label="Aba preferências" title="Preferências">
+                        <button type="button" className={`btn btn-icon ${activeTab === 'settings' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('settings')} aria-label="Aba ajustes" title="Ajustes">
                             <SettingsIcon size={17} />
                         </button>
-                        <button className={`btn btn-icon ${activeTab === 'history' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('history')} aria-label="Aba histórico" title="Histórico">
+                        <button type="button" className={`btn btn-icon ${activeTab === 'history' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('history')} aria-label="Aba histórico" title="Histórico">
                             <History size={17} />
                         </button>
                     </div>
 
-                    <button className="btn btn-outline btn-icon" onClick={toggleTheme} style={{ borderRadius: '12px' }} aria-label="Alternar tema" title={isDarkMode ? 'Modo claro' : 'Modo escuro'}>
+                    <button type="button" className="btn btn-outline btn-icon" onClick={toggleTheme} style={{ borderRadius: '12px' }} aria-label="Alternar tema" title={isDarkMode ? 'Modo claro' : 'Modo escuro'}>
                         {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
                     </button>
 
                     {status === 'ready' && (
-                        <button className={`btn ${isFieldMode ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsFieldMode((v) => !v)} style={{ borderRadius: '12px' }} title="Modo motorista em campo">
-                            <LocateFixed size={17} /> <span className="hide-mobile">Modo motorista</span>
+                        <button type="button" className={`btn ${isFieldMode ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsFieldMode((v) => !v)} style={{ borderRadius: '12px' }} title="Tela do motorista">
+                            <LocateFixed size={17} /> <span className="hide-mobile">Tela do motorista</span>
                         </button>
                     )}
 

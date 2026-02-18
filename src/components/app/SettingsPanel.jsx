@@ -19,21 +19,21 @@ const SettingsPanel = ({
             <SectionHeader
                 title={(
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Settings size={17} color="var(--primary)" /> Preferências
+                        <Settings size={17} color="var(--primary)" /> Ajustes
                     </span>
                 )}
-                subtitle="Personalize aparência, histórico e sessão atual."
+                subtitle="Ajuste o app e limpe dados quando precisar."
             />
 
             <div className="settings-body">
                 <p className="settings-intro">
-                    Ações rápidas para personalizar e organizar sua operação.
+                    Opções rápidas do dia a dia.
                 </p>
 
                 {/* Actions */}
                 <div className="settings-actions">
                     <Button variant="outline" onClick={onBackToOptimizer} fullWidth>
-                        <LayoutGrid size={15} /> Voltar ao planejamento
+                        <LayoutGrid size={15} /> Voltar para início
                     </Button>
                     <Button variant="outline" onClick={onOpenHistory} fullWidth>
                         <History size={15} /> Ver histórico
@@ -44,19 +44,19 @@ const SettingsPanel = ({
                     </Button>
                     {!isAppInstalled && (
                         <Button variant="primary" onClick={onInstallApp} fullWidth>
-                            <Download size={15} /> Instalar app na área de trabalho
+                            <Download size={15} /> Instalar app no celular
                         </Button>
                     )}
                     {isAppInstalled && (
                         <Button variant="outline" disabled fullWidth>
-                            <CheckCircle2 size={15} /> App já instalado neste dispositivo
+                            <CheckCircle2 size={15} /> App já instalado
                         </Button>
                     )}
                     <Button variant="outline" onClick={onClearWorkspace} fullWidth>
-                        <Trash2 size={15} /> Limpar sessão atual
+                        <Trash2 size={15} /> Limpar rota atual
                     </Button>
                     <Button variant="outline" onClick={onClearHistory} fullWidth>
-                        <History size={15} /> Apagar histórico de rotas
+                        <History size={15} /> Limpar histórico
                     </Button>
                 </div>
             </div>

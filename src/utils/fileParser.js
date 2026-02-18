@@ -14,7 +14,7 @@ export const parseFile = async (file) => {
         return parseExcelFile(file);
     }
 
-    throw new Error('Formato não suportado. Use .csv ou .xlsx');
+    throw new Error('Formato não suportado. Use CSV ou Excel.');
 };
 
 const parseCsvFile = async (file) => {
@@ -26,7 +26,7 @@ const parseCsvFile = async (file) => {
             encoding: 'UTF-8',
             complete: (results) => {
                 if (results.errors.length > 0 && results.data.length === 0) {
-                    reject(new Error('Erro ao ler CSV: Formato inválido.'));
+                    reject(new Error('Erro ao ler CSV. Verifique o formato do arquivo.'));
                     return;
                 }
                 resolve(processData(results.data));
@@ -49,10 +49,10 @@ const parseExcelFile = async (file) => {
                 const jsonData = parseExcelRows(worksheet, XLSX);
                 resolve(processData(jsonData));
             } catch {
-                reject(new Error('Erro ao processar Excel. Verifique se o arquivo não está protegido.'));
+                reject(new Error('Erro ao abrir Excel. Verifique se o arquivo está liberado.'));
             }
         };
-        reader.onerror = () => reject(new Error('Falha na leitura do arquivo.'));
+        reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
         reader.readAsArrayBuffer(file);
     });
 };

@@ -21,7 +21,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     const openGoogleMaps = () => {
         if (items.length < 2) {
-            onActionFeedback?.('Adicione pelo menos duas paradas para abrir no Google Maps.', 'info');
+            onActionFeedback?.('Adicione pelo menos duas entregas para abrir a rota no Google Maps.', 'info');
             return;
         }
         const origin = items[0].address;
@@ -35,7 +35,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
     const openNextStopGoogleMaps = () => {
         const next = items.find((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
         if (!next) {
-            onActionFeedback?.('Nenhuma parada pendente para navegação.', 'info');
+            onActionFeedback?.('Nenhuma entrega pendente para navegação.', 'info');
             return;
         }
         const destination = next.coords
@@ -68,14 +68,14 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
         link.setAttribute('href', url);
         link.setAttribute('download', 'rota_profissional_mestra.csv');
         link.click();
-        onActionFeedback?.('Arquivo CSV exportado com sucesso.', 'success');
+        onActionFeedback?.('Arquivo CSV salvo.', 'success');
     };
 
     const statusMeta = (item, idx) => {
         if (idx === 0) return { label: 'Partida', color: '#10b981', background: 'rgba(16, 185, 129, 0.06)' };
         const value = stopStatuses[String(item.id)] || 'pending';
         if (value === 'done') return { label: 'Entregue', color: '#10b981', background: 'rgba(16, 185, 129, 0.06)' };
-        if (value === 'failed') return { label: 'Falha', color: '#ef4444', background: 'rgba(239, 68, 68, 0.06)' };
+        if (value === 'failed') return { label: 'Não entregue', color: '#ef4444', background: 'rgba(239, 68, 68, 0.06)' };
         return { label: 'Pendente', color: '#3b82f6', background: 'var(--bg)' };
     };
 
@@ -91,7 +91,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     const handlePrint = () => {
         if (items.length === 0) {
-            onActionFeedback?.('Não há dados para imprimir.', 'info');
+            onActionFeedback?.('Não há entregas para imprimir.', 'info');
             return;
         }
         window.print();
@@ -103,7 +103,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 <SectionHeader
                     title={(
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-                            <MapPin size={17} color="var(--primary)" /> Lista de paradas
+                            <MapPin size={17} color="var(--primary)" /> Lista de entregas
                         </span>
                     )}
                     actions={(
@@ -118,7 +118,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                         <Search size={14} className="route-search-icon" />
                         <input
                             type="text"
-                            placeholder="Buscar por endereço ou número da parada..."
+                            placeholder="Buscar endereço ou número da entrega..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="route-search-input"
@@ -129,7 +129,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 <div className="route-stops-scroll custom-scroll">
                     {filteredItems.map(({ item, idx }) => {
                         const meta = statusMeta(item, idx);
-                        const badgeTone = meta.label === 'Entregue' ? 'success' : meta.label === 'Falha' ? 'error' : meta.label === 'Pendente' ? 'warning' : 'info';
+                        const badgeTone = meta.label === 'Entregue' ? 'success' : meta.label === 'Não entregue' ? 'error' : meta.label === 'Pendente' ? 'warning' : 'info';
                         return (
                             <div key={item.id} className="route-stop-item" style={{ background: meta.background, borderColor: idx === 0 ? 'var(--success)' : undefined }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
@@ -154,7 +154,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                                             <CheckCircle2 size={13} /> Entregue
                                         </Button>
                                         <Button variant="danger" size="sm" className="route-stop-mini-btn" onClick={() => onMarkFailed?.(idx)}>
-                                            <XCircle size={13} /> Falha
+                                            <XCircle size={13} /> Não entregue
                                         </Button>
                                         <Button variant="outline" size="sm" className="route-stop-mini-btn" onClick={() => onCopyAddress?.(item.address)}>
                                             <Copy size={13} /> Copiar endereço
@@ -171,13 +171,13 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 <SectionHeader title="Navegação externa" subtitle="Abra a próxima entrega ou a rota completa." />
                 <div className="route-external-actions">
                     <Button variant="primary" onClick={openNextStopGoogleMaps} disabled={!hasPendingStop}>
-                        <Navigation size={16} /> Navegar para próxima parada
+                        <Navigation size={16} /> Navegar para próxima entrega
                     </Button>
                     <Button variant="outline" onClick={openGoogleMaps} disabled={!hasRouteToOpen}>
-                        <ExternalLink size={16} /> Abrir rota completa
+                        <ExternalLink size={16} /> Abrir rota no Google Maps
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }} disabled={items.length === 0}>
-                        Imprimir lista de paradas
+                        Imprimir entregas
                     </Button>
                 </div>
             </Card>

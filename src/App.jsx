@@ -24,9 +24,9 @@ const WORKSPACE_KEY = 'rota_mestra_v4_elite';
 const HISTORY_KEY = 'rota_mestra_v4_history';
 const ACTION_QUEUE_KEY = 'rota_mestra_action_queue_v1';
 const PANEL_TABS = [
-  { key: 'optimizer', label: 'Planejamento', Icon: LayoutGrid },
+  { key: 'optimizer', label: 'Início', Icon: LayoutGrid },
   { key: 'history', label: 'Histórico', Icon: History },
-  { key: 'settings', label: 'Configurações', Icon: SettingsIcon }
+  { key: 'settings', label: 'Ajustes', Icon: SettingsIcon }
 ];
 const hasValidCoords = (item) => Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
 const isStopResolved = (statusValue) => statusValue === 'done' || statusValue === 'failed';
@@ -115,7 +115,7 @@ function App() {
   useEffect(() => {
     if (!isOnline || pendingActions.length === 0) return;
     setPendingActions([]);
-    showToast('Ações offline sincronizadas.', 'success');
+    showToast('Ações sem internet enviadas.', 'success');
   }, [isOnline, pendingActions.length]);
 
   useWorkspacePersistence({
@@ -151,7 +151,7 @@ function App() {
     const onAppInstalled = () => {
       setIsAppInstalled(true);
       setInstallPromptEvent(null);
-      setToast({ message: 'Aplicativo instalado com sucesso.', type: 'success' });
+      setToast({ message: 'App instalado com sucesso.', type: 'success' });
     };
 
     const mediaQuery = window.matchMedia('(display-mode: standalone)');
@@ -183,7 +183,7 @@ function App() {
 
   const handleInstallApp = async () => {
     if (isAppInstalled) {
-      showToast('Este app já está instalado neste dispositivo.', 'info');
+      showToast('Este app já está instalado.', 'info');
       return;
     }
 
@@ -205,11 +205,11 @@ function App() {
       showToast('No Safari: Compartilhar -> Adicionar à Tela de Início.', 'info');
       return;
     }
-    showToast('No Chrome/Edge: menu do navegador -> Instalar aplicativo.', 'info');
+    showToast('No Chrome/Edge: menu do navegador -> Instalar app.', 'info');
   };
 
   const resetWorkspace = () => {
-    if (!window.confirm('Deseja limpar a rota atual e começar uma nova?')) return;
+    if (!window.confirm('Começar nova rota? Isso limpa a rota atual.')) return;
     setItems([]);
     setStatus('idle');
     setProgress(0);
@@ -232,7 +232,7 @@ function App() {
     } catch {
       // noop
     }
-    showToast('Rota limpa com sucesso.', 'info');
+    showToast('Rota limpa.', 'info');
   };
 
   const toggleTheme = () => {
@@ -251,7 +251,7 @@ function App() {
       setProgress(0);
       const data = await parseFile(file);
       if (!Array.isArray(data) || data.length === 0) {
-        throw new Error('O arquivo não possui dados válidos.');
+        throw new Error('Arquivo sem dados válidos.');
       }
       setItems(data);
       setStartPointId(data[0]?.id ?? null);
@@ -264,7 +264,7 @@ function App() {
       setActiveTab('optimizer');
       setMobileView('panel');
       setStatus('idle');
-      showToast('Arquivo carregado com sucesso.', 'success');
+      showToast('Planilha carregada.', 'success');
     } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
   };
 
@@ -282,7 +282,7 @@ function App() {
       });
       const validItems = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
       if (!validItems.length) {
-        throw new Error('Não foi possível localizar os endereços informados na planilha.');
+        throw new Error('Não foi possível localizar os endereços da planilha.');
       }
 
       setStatus('optimizing');
@@ -312,7 +312,7 @@ function App() {
       const optimizedDistanceKm = Number.isFinite(res?.distance) ? res.distance / 1000 : null;
       const optimizedDurationMin = Number.isFinite(res?.duration) ? Math.round(res.duration / 60) : null;
       if (optimizedDistanceKm !== null && optimizedDurationMin !== null) {
-        showToast(`Rota otimizada: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
+        showToast(`Rota pronta: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
       }
       confetti({ particleCount: 200, spread: 70, origin: { y: 0.7 } });
     } catch (err) {
@@ -332,11 +332,11 @@ function App() {
         ...current,
         { stopId, status: s, timestamp: Date.now() }
       ]));
-      showToast('Sem internet. Ação salva para sincronizar quando a conexão voltar.', 'info');
+      showToast('Sem internet. Ação salva para enviar depois.', 'info');
       return;
     }
     showToast(
-      s === 'done' ? 'Entrega marcada como concluída.' : 'Entrega marcada como falha.',
+      s === 'done' ? 'Entrega marcada.' : 'Marcado como não entregue.',
       s === 'done' ? 'success' : 'error'
     );
   };
@@ -377,7 +377,7 @@ function App() {
   })();
   const openCurrentNavigation = () => {
     if (!currentItem?.coords) {
-      showToast('Não há próxima parada pendente.', 'info');
+      showToast('Não há entrega pendente.', 'info');
       return;
     }
     const destination = `${currentItem.coords.lat},${currentItem.coords.lon}`;
@@ -399,21 +399,21 @@ function App() {
       startPointId
     };
     persistHistory([entry, ...routeHistory].slice(0, 30));
-    showToast('Rota salva no histórico com sucesso.', 'success');
+    showToast('Rota guardada no histórico.', 'success');
   };
   const processingLabel = status === 'uploading'
-    ? 'Importando planilha'
+    ? 'Lendo planilha'
     : status === 'geocoding'
-      ? 'Geocodificando endereços'
-      : 'Otimizando rota';
+      ? 'Localizando endereços'
+      : 'Montando rota';
   const routeCount = Math.max(0, items.length - 1);
   const headerStageLabel = status === 'ready'
     ? 'Rota pronta'
     : status === 'geocoding' || status === 'optimizing' || status === 'uploading'
       ? processingLabel
       : routeCount > 0
-        ? 'Aguardando otimização'
-        : 'Novo planejamento';
+        ? 'Pronta para montar'
+        : 'Nova rota';
   const detectedCity = (() => {
     const cityCounter = new Map();
     items.forEach((item) => {
@@ -444,7 +444,7 @@ function App() {
           <div className="brand-icon-box"><Truck size={20} /></div>
           <div className="brand-copy">
             <span className="brand-text">RotaBoa</span>
-            <span className="brand-caption hide-mobile">Roteirização inteligente para operação diária</span>
+            <span className="brand-caption hide-mobile">Rota de entregas do dia</span>
           </div>
         </div>
         <div className="header-kpis hide-mobile">
@@ -453,7 +453,7 @@ function App() {
             {headerStageLabel}
           </div>
           <div className="header-pill">
-            {routeCount} parada(s)
+            {routeCount} entrega(s)
           </div>
           <div className={`header-pill ${isOnline ? 'header-pill-online' : 'header-pill-offline'}`}>
             {isOnline ? 'Online' : 'Offline'}
@@ -464,11 +464,11 @@ function App() {
             variant={activeTab === 'settings' ? 'primary' : 'outline'}
             className="top-glass-settings-btn"
             onClick={() => switchToTab('settings')}
-            aria-label="Abrir configurações"
-            title="Configurações"
+            aria-label="Abrir ajustes"
+            title="Ajustes"
           >
             <SettingsIcon size={16} />
-            <span className="hide-mobile">Configurações</span>
+            <span className="hide-mobile">Ajustes</span>
           </Button>
           {!isMobile && (
             <Button
@@ -515,10 +515,10 @@ function App() {
                     <div className="animate-slide-up hero-container">
                       <div className="hero-badge">Versão 4.0</div>
                       <h1 className="hero-title">
-                        Entregas mais rápidas com <span className="text-gradient">rota inteligente</span>
+                        Sua rota de entregas <span className="text-gradient">em poucos toques</span>
                       </h1>
                       <p className="hero-subtitle">
-                        Importe sua planilha e gere uma sequência otimizada de paradas em poucos segundos.
+                        Envie a planilha e organize a ordem das entregas rapidamente.
                       </p>
 
                       <div className="hero-upload-section">
@@ -532,13 +532,13 @@ function App() {
                         </div>
                         <div className="hero-divider" />
                         <div className="hero-stat">
-                          <span className="hero-stat-value">Held-Karp</span>
-                          <span className="hero-stat-label">Logística</span>
+                          <span className="hero-stat-value">Rota fácil</span>
+                          <span className="hero-stat-label">Menos voltas</span>
                         </div>
                         <div className="hero-divider" />
                         <div className="hero-stat">
                           <span className="hero-stat-value">Tempo real</span>
-                          <span className="hero-stat-label">Otimização</span>
+                          <span className="hero-stat-label">Atualização</span>
                         </div>
                       </div>
 
@@ -567,13 +567,13 @@ function App() {
                   {status === 'idle' && items.length > 0 && (
                     <div className="animate-slide-up panel-stack">
                       <div className="bento-card">
-                        <h3 className="planner-title">Planejar rota</h3>
-                        <div className="import-ready-pill">Planilha validada para otimização</div>
-                        <p className="clean-muted planner-meta">{Math.max(0, items.length - 1)} parada(s).</p>
+                        <h3 className="planner-title">Montar rota</h3>
+                        <div className="import-ready-pill">Planilha pronta para montar a rota</div>
+                        <p className="clean-muted planner-meta">{Math.max(0, items.length - 1)} entrega(s).</p>
                         {detectedCity && <p className="clean-muted planner-city">Região principal: {detectedCity}</p>}
                         <div className="planner-quick-actions">
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowAdvancedConfig((v) => !v)}>
-                            {showAdvancedConfig ? 'Ocultar opções' : 'Mais opções'}
+                            {showAdvancedConfig ? 'Ocultar opções' : 'Opções extras'}
                           </Button>
                           <Button variant="outline" size="sm" fullWidth onClick={resetWorkspace}>
                             Trocar planilha
@@ -582,7 +582,7 @@ function App() {
 
                         <div className="planner-form-grid">
                           <div className="config-option">
-                            <span className="config-label">Otimizar por</span>
+                            <span className="config-label">Priorizar</span>
                             <select value={optimizeBy} onChange={e => setOptimizeBy(e.target.value)}>
                               <option value="distance">Menor distância</option>
                               <option value="duration">Menor tempo</option>
@@ -607,7 +607,7 @@ function App() {
                             </>
                           )}
                           <Button variant="p" fullWidth size="lg" className="sticky-optimize-btn" onClick={startOptimization}>
-                            <Zap size={20} fill="white" /> Otimizar rota
+                            <Zap size={20} fill="white" /> Montar rota
                           </Button>
                         </div>
                       </div>
@@ -624,9 +624,9 @@ function App() {
                             Todas as entregas foram concluídas.
                           </p>
                           <div className="quick-overview-grid finished-grid">
-                            <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
-                            <span>Concluídas: <b>{deliveryStats.done}</b></span>
-                            <span>Falhas: <b>{deliveryStats.failed}</b></span>
+                            <span>Prioridade: <b>{routeObjectiveLabel}</b></span>
+                            <span>Entregues: <b>{deliveryStats.done}</b></span>
+                            <span>Não entregues: <b>{deliveryStats.failed}</b></span>
                           </div>
                         </div>
                       )}
@@ -634,7 +634,7 @@ function App() {
                       {currentItem && (
                         <div className="bento-card clean-next-stop-card">
                           <div className="next-stop-head">
-                            <p className="config-label">Próxima parada</p>
+                            <p className="config-label">Próxima entrega</p>
                             <p className="next-stop-percent">{deliveryProgressPercent}%</p>
                           </div>
                           <div className="progress-bar-track next-stop-track">
@@ -647,17 +647,23 @@ function App() {
                             </p>
                           )}
                           <div className="delivery-action-grid next-stop-actions">
-                            <Button variant="outline" size="lg" className="action-btn action-btn-maps" onClick={openCurrentNavigation}>
-                              <Navigation size={16} /> Abrir no Google Maps
-                            </Button>
                             <div className="secondary-actions-row secondary-actions-row-strong">
-                              <Button variant="success" className="action-btn action-btn-success" onClick={() => markStatus(currentIdx, 'done')}>
-                                Marcar como entregue
+                              <Button variant="success" className="action-btn action-btn-success action-btn-status" onClick={() => markStatus(currentIdx, 'done')}>
+                                Entregue
                               </Button>
-                              <Button variant="danger" className="action-btn action-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                                Marcar não entregue
+                              <Button variant="danger" className="action-btn action-btn-danger action-btn-status" onClick={() => markStatus(currentIdx, 'failed')}>
+                                Não entregue
                               </Button>
                             </div>
+                            {isMobile ? (
+                              <Button variant="primary" size="sm" className="action-btn action-btn-driver" onClick={() => { setOperationMode(true); setMobileView('map'); }}>
+                                <Navigation size={15} /> Tela do motorista
+                              </Button>
+                            ) : (
+                              <Button variant="outline" size="sm" className="action-btn action-btn-maps action-btn-maps-secondary" onClick={openCurrentNavigation}>
+                                <Navigation size={15} /> Navegar no Google Maps
+                              </Button>
+                            )}
                           </div>
                         </div>
                       )}
@@ -669,7 +675,7 @@ function App() {
                             {upcomingStops.map(({ item, idx }, position) => (
                               <div key={`upcoming-${item.id}`} className="upcoming-item">
                                 <p className="upcoming-item-label">
-                                  {position === 0 ? `Agora · Parada ${idx + 1}` : `Depois · Parada ${idx + 1}`}
+                                  {position === 0 ? `Agora · Entrega ${idx + 1}` : `Depois · Entrega ${idx + 1}`}
                                 </p>
                                 <p className="upcoming-item-address">{item.address}</p>
                                 {item.observation && (
@@ -684,21 +690,21 @@ function App() {
                       )}
 
                       <Button variant="outline" size="sm" fullWidth onClick={() => setShowMoreTools((v) => !v)}>
-                        {showMoreTools ? 'Ocultar ações avançadas' : 'Mostrar ações avançadas'}
+                        {showMoreTools ? 'Menos opções' : 'Outras ações'}
                       </Button>
 
                       {showMoreTools && (
                         <>
                           <div className="secondary-actions-row">
                             <Button variant="o" size="sm" fullWidth onClick={() => setStatus('idle')}>
-                              <RefreshCw size={15} /> Recalcular rota
+                              <RefreshCw size={15} /> Recomeçar rota
                             </Button>
                             <Button variant="outline" size="sm" fullWidth onClick={saveCurrentRoute}>
-                              Salvar no histórico
+                              Guardar rota
                             </Button>
                           </div>
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowStopList((v) => !v)}>
-                            {showStopList ? 'Ocultar lista de paradas' : 'Mostrar lista de paradas'}
+                            {showStopList ? 'Ocultar entregas' : 'Ver entregas'}
                           </Button>
                           {showStopList && (
                             <RouteDetails
@@ -718,13 +724,13 @@ function App() {
                             />
                           )}
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
-                            {showRouteSummary ? 'Ocultar resumo da rota' : 'Mostrar resumo da rota'}
+                            {showRouteSummary ? 'Ocultar resumo' : 'Resumo da rota'}
                           </Button>
                         </>
                       )}
                       {isMobile && (
-                        <Button variant="primary" fullWidth onClick={() => { setOperationMode(true); setMobileView('map'); }}>
-                          <Navigation size={16} /> Modo operação
+                        <Button variant="primary" fullWidth onClick={openCurrentNavigation}>
+                          <Navigation size={16} /> Navegar no Google Maps
                         </Button>
                       )}
                       {showMoreTools && showRouteSummary && (
@@ -743,14 +749,14 @@ function App() {
                           {baselineKm !== null && baselineMin !== null && optimizedMin !== null && (
                             <div className="summary-compare-wrap">
                               <p className="summary-compare">
-                                Comparação: antes <b>{baselineKm.toFixed(1)} km / {baselineMin} min</b> · agora <b>{optimizedKm?.toFixed(1)} km / {optimizedMin} min</b>
+                                Antes: <b>{baselineKm.toFixed(1)} km / {baselineMin} min</b> · Agora: <b>{optimizedKm?.toFixed(1)} km / {optimizedMin} min</b>
                               </p>
                               <p className="summary-saving">
-                                Economia: {savedKm !== null ? `${savedKm.toFixed(1)} km` : '--'} e {savedMin !== null ? `${savedMin} min` : '--'}
+                                Você economizou: {savedKm !== null ? `${savedKm.toFixed(1)} km` : '--'} e {savedMin !== null ? `${savedMin} min` : '--'}
                               </p>
                               {routeQuality && (
                                 <p className={`summary-quality ${routeQuality.tone === 'success' ? 'summary-quality-success' : ''}`}>
-                                  Qualidade da otimização: {routeQuality.label}
+                                  Qualidade da rota: {routeQuality.label}
                                 </p>
                               )}
                             </div>
@@ -811,18 +817,18 @@ function App() {
             <div className="hud-card">
               <div className="hud-head">
                 <div className="status-glow" />
-                <span className="hud-title">PRÓXIMA PARADA</span>
+                <span className="hud-title">PRÓXIMA ENTREGA</span>
               </div>
               <h2 className="hud-address">{currentItem.address}</h2>
               <div className="hud-action-grid">
-                <button className="btn-elite btn-p hud-action-btn" onClick={openCurrentNavigation}>
+                <button type="button" className="btn-elite btn-p hud-action-btn" onClick={openCurrentNavigation}>
                   <Navigation size={18} fill="white" /> Navegar
                 </button>
-                <button className="btn-elite btn-success hud-action-btn" onClick={() => markStatus(currentIdx, 'done')}>
+                <button type="button" className="btn-elite btn-success hud-action-btn" onClick={() => markStatus(currentIdx, 'done')}>
                   Entregue
                 </button>
-                <button className="btn-elite btn-danger hud-action-btn" onClick={() => markStatus(currentIdx, 'failed')}>
-                  Falha
+                <button type="button" className="btn-elite btn-danger hud-action-btn" onClick={() => markStatus(currentIdx, 'failed')}>
+                  Não entregue
                 </button>
               </div>
             </div>
@@ -831,14 +837,14 @@ function App() {
           {isMobile && operationMode && status === 'ready' && (
             <div className="operation-mode-overlay">
               <div className="operation-mode-head">
-                <span>Modo operação</span>
+                <span>Tela do motorista</span>
                 <button type="button" className="operation-close-btn" onClick={() => setOperationMode(false)}>
                   Fechar
                 </button>
               </div>
               {currentItem ? (
                 <>
-                  <p className="operation-label">PRÓXIMA PARADA</p>
+                  <p className="operation-label">PRÓXIMA ENTREGA</p>
                   <h2 className="operation-address">{currentItem.address}</h2>
 
                   <div className="primary-actions-bottom-row">
@@ -856,7 +862,7 @@ function App() {
               ) : (
                 <>
                   <p className="operation-label">CONCLUÍDO</p>
-                  <h2 className="operation-address">Todas as paradas foram finalizadas.</h2>
+                  <h2 className="operation-address">Todas as entregas foram finalizadas.</h2>
                 </>
               )}
             </div>
@@ -869,13 +875,15 @@ function App() {
       {isMobile && !operationMode && (
         <nav className="mobile-nav-pill">
           <button
+            type="button"
             className={`nav-item ${mobileView === 'panel' && activeTab === 'optimizer' ? 'active' : ''}`}
             onClick={() => switchToTab('optimizer')}
           >
             <LayoutGrid size={18} />
-            Planejamento
+            Início
           </button>
           <button
+            type="button"
             className={`nav-item ${mobileView === 'map' ? 'active' : ''}`}
             onClick={() => setMobileView('map')}
           >
@@ -884,12 +892,13 @@ function App() {
           </button>
 
           <button
+            type="button"
             className="nav-action-center"
             onClick={() => (currentItem ? openCurrentNavigation() : startOptimization())}
             disabled={!currentItem && status !== 'idle'}
           >
             {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
-            {status === 'ready' ? 'Navegar agora' : 'Otimizar rota'}
+            {status === 'ready' ? 'Navegar agora' : 'Começar rota'}
           </button>
         </nav>
       )}
@@ -900,9 +909,9 @@ function App() {
           {toast.message}
         </div>
       )}
-      {isMobile && pendingActions.length > 0 && (
+          {isMobile && pendingActions.length > 0 && (
         <div className="app-toast app-toast-info app-toast-queue">
-          {pendingActions.length} ação(ões) aguardando conexão
+          {pendingActions.length} ação(ões) aguardando internet
         </div>
       )}
     </div>

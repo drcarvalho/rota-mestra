@@ -10,13 +10,13 @@ const HistoryPanel = ({ routeHistory, onClear, onLoad }) => {
             <SectionHeader
                 title={(
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Clock size={17} color="var(--primary)" /> Histórico de Rotas
+                        <Clock size={17} color="var(--primary)" /> Histórico de rotas
                     </span>
                 )}
-                subtitle="Recupere planejamentos anteriores com um toque."
+                subtitle="Abra uma rota antiga com um toque."
                 actions={(
                     <Button variant="outline" size="sm" onClick={onClear} disabled={routeHistory.length === 0}>
-                        <Trash2 size={14} /> Apagar histórico
+                        <Trash2 size={14} /> Limpar histórico
                     </Button>
                 )}
             />
@@ -29,6 +29,7 @@ const HistoryPanel = ({ routeHistory, onClear, onLoad }) => {
             <div className="history-list">
                 {routeHistory.map((entry) => (
                     <button
+                        type="button"
                         key={entry.id}
                         className="history-item-btn"
                         onClick={() => onLoad(entry)}
@@ -38,7 +39,7 @@ const HistoryPanel = ({ routeHistory, onClear, onLoad }) => {
                             <span>{entry.title}</span>
                         </span>
                         <span className="history-item-meta">
-                            {entry.items?.length || 0} paradas
+                            {entry.items?.length || 0} entregas
                         </span>
                     </button>
                 ))}

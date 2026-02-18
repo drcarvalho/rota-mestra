@@ -34,7 +34,7 @@ const FileUploader = ({ onUpload, onValidationError }) => {
         if (['csv', 'xlsx', 'xls'].includes(ext)) {
             onUpload(file);
         } else {
-            onValidationError?.('Formato inválido. Envie CSV ou Excel (.xlsx/.xls).');
+            onValidationError?.('Formato inválido. Envie CSV ou Excel.');
         }
     };
 
@@ -68,10 +68,10 @@ const FileUploader = ({ onUpload, onValidationError }) => {
                 </div>
 
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                    Importar planilha de entregas
+                    Enviar planilha de entregas
                 </h3>
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '280px', margin: '0 auto', lineHeight: 1.5 }}>
-                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b>, ou clique para selecionar.
+                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b>, ou toque para escolher.
                 </p>
 
                 <div className="upload-format-badges">

@@ -184,7 +184,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
 
             {items.length === 0 && (
                 <div className="map-overlay-card map-overlay-empty">
-                    <p>Aguardando endereços...</p>
+                    <p>Aguardando endereços da planilha...</p>
                 </div>
             )}
 
@@ -194,8 +194,9 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
 
             {!hasLoadedTile && (
                 <div className="map-overlay-card map-overlay-warning">
-                    <p>Carregando mapa. Se não abrir, toque em "Alterar base".</p>
+                    <p>Carregando mapa. Se travar, toque em "Trocar mapa".</p>
                     <button
+                        type="button"
                         className="map-overlay-button"
                         onClick={() => {
                             setHasLoadedTile(false);
@@ -203,7 +204,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
                             setProviderIdx((idx) => (idx + 1) % TILE_PROVIDERS.length);
                         }}
                     >
-                        Alterar base
+                        Trocar mapa
                     </button>
                 </div>
             )}
