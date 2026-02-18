@@ -17,7 +17,7 @@ export const geocodeAddress = async (address) => {
                 lon: parseFloat(data[0].lon),
                 display_name: data[0].display_name
             } : null;
-        } catch (e) {
+        } catch {
             return null;
         }
     };

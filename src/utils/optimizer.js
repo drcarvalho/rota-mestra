@@ -223,30 +223,31 @@ const getBestSequence = (items, startIndex, roundTrip) => {
 };
 
 // Reliable optimizer: exact TSP for small N, strong heuristic for large N + OSRM geometry.
-export const optimizeRoute = async (items, options = { roundTrip: false, startIndex: 0 }) => {
+export const optimizeRoute = async (items, options = { roundTrip: false, startIndex: 0, optimizeBy: 'distance' }) => {
     if (items.length < 2) return { orderedItems: items, geometry: null, distance: 0, duration: 0 };
 
     const startIdx = options.startIndex >= 0 && options.startIndex < items.length ? options.startIndex : 0;
+    const optimizeBy = options.optimizeBy === 'duration' ? 'duration' : 'distance';
 
     // Exact best route on real road costs for smaller inputs.
     // With <=11 points, this is still practical and guarantees optimality.
     if (items.length <= 11) {
-        const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip);
+        const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip, optimizeBy);
         if (exactRoad) {
-            return exactRoad;
+            return { ...exactRoad, optimizeBy };
         }
     }
 
     // Better road heuristic for larger inputs using OSRM matrix + 2-opt.
-    const roadHeuristic = await getRoadHeuristicOptimized(items, startIdx, options.roundTrip);
+    const roadHeuristic = await getRoadHeuristicOptimized(items, startIdx, options.roundTrip, optimizeBy);
     if (roadHeuristic) {
-        return roadHeuristic;
+        return { ...roadHeuristic, optimizeBy };
     }
 
     // Fallback road optimizer for larger inputs.
     const tripOptimized = await getOSRMTripOptimized(items, startIdx, options.roundTrip);
     if (tripOptimized) {
-        return tripOptimized;
+        return { ...tripOptimized, optimizeBy };
     }
 
     // Fallback: local optimizer + OSRM route geometry.
@@ -258,15 +259,16 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
         orderedItems: route,
         geometry: pathData.geometry,
         distance: pathData.distance,
-        duration: pathData.duration
+        duration: pathData.duration,
+        optimizeBy
     };
 };
 
-const getExactRoadOptimized = async (items, startIndex, roundTrip = false) => {
+const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance') => {
     const table = await getOSRMTableMatrix(items);
     if (!table) return null;
 
-    const costMatrix = table.distanceMatrix || table.durationMatrix;
+    const costMatrix = selectCostMatrix(table, optimizeBy);
     if (!costMatrix) return null;
 
     const indexRoute = heldKarp(costMatrix, startIndex, roundTrip);
@@ -283,11 +285,11 @@ const getExactRoadOptimized = async (items, startIndex, roundTrip = false) => {
     };
 };
 
-const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false) => {
+const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance') => {
     const table = await getOSRMTableMatrix(items);
     if (!table) return null;
 
-    const costMatrix = table.distanceMatrix || table.durationMatrix;
+    const costMatrix = selectCostMatrix(table, optimizeBy);
     if (!costMatrix) return null;
 
     const n = items.length;
@@ -317,6 +319,13 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false) =
         distance: pathData.distance,
         duration: pathData.duration
     };
+};
+
+const selectCostMatrix = (table, optimizeBy) => {
+    if (optimizeBy === 'duration') {
+        return table.durationMatrix || table.distanceMatrix;
+    }
+    return table.distanceMatrix || table.durationMatrix;
 };
 
 const getOSRMTableMatrix = async (items) => {

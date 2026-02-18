@@ -122,6 +122,32 @@ header {
   white-space: nowrap;
 }
 
+.mobile-main-action {
+  min-height: 56px;
+}
+
+.stepper-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+}
+
+.step-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.step-chip-active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .btn-primary {
   background: var(--primary);
   color: white;
@@ -258,5 +284,83 @@ header {
 @media (max-width: 640px) {
   .hide-mobile {
     display: none;
+  }
+
+  .btn {
+    min-height: 48px;
+    font-size: 1rem;
+  }
+
+  .app-container {
+    padding-bottom: 88px;
+  }
+
+  .stepper-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mobile-actions {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  display: none;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 0.6rem;
+  z-index: 80;
+}
+
+.field-mode-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(2, 6, 23, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.field-mode-card {
+  width: min(680px, 100%);
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  padding: 1rem;
+}
+
+.mobile-action-btn {
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-radius: 14px;
+  min-height: 52px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  box-shadow: var(--shadow-md);
+}
+
+.mobile-action-btn:disabled {
+  opacity: 0.55;
+}
+
+.mobile-action-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+@media (max-width: 900px) {
+  .mobile-actions {
+    display: grid;
   }
 }
