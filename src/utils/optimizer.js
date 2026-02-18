@@ -50,6 +50,98 @@ const buildBaselineOrder = (length, startIndex) => {
     return baseline;
 };
 
+const PROFILE_RETURN_PENALTY = {
+    neutral: 0.0,
+    shopee: 0.09,
+    mercado_livre: 0.15
+};
+
+const safeMatrixValue = (matrix, from, to) => {
+    if (!matrix || !Array.isArray(matrix[from])) return 0;
+    const value = matrix[from][to];
+    return Number.isFinite(value) ? value : 0;
+};
+
+const averagePositiveCost = (matrix) => {
+    if (!Array.isArray(matrix) || matrix.length === 0) return 1000;
+    let total = 0;
+    let count = 0;
+    for (let i = 0; i < matrix.length; i++) {
+        for (let j = 0; j < matrix[i].length; j++) {
+            const value = matrix[i][j];
+            if (i !== j && Number.isFinite(value) && value > 0) {
+                total += value;
+                count += 1;
+            }
+        }
+    }
+    return count > 0 ? total / count : 1000;
+};
+
+const hasAdvancedConstraints = (items) => {
+    return items.some((item) => (
+        (Number.isFinite(item.priorityWeight) && item.priorityWeight > 1) ||
+        Number.isFinite(item.timeWindowStartMin) ||
+        Number.isFinite(item.timeWindowEndMin)
+    ));
+};
+
+const resolveProfile = (items, explicitProfile = 'neutral') => {
+    if (explicitProfile && explicitProfile !== 'neutral') return explicitProfile;
+    const platformHints = items.map((item) => item.platform).filter(Boolean);
+    if (platformHints.includes('mercado_livre')) return 'mercado_livre';
+    if (platformHints.includes('shopee')) return 'shopee';
+    return 'neutral';
+};
+
+const routeScoreWithConstraints = (indexRoute, {
+    costMatrix,
+    durationMatrix,
+    items,
+    roundTrip,
+    startIndex,
+    profile
+}) => {
+    const travelCost = routeDistance(indexRoute, costMatrix, roundTrip);
+    const avgCost = averagePositiveCost(costMatrix);
+    let penalty = 0;
+    let cumulativeDurationSec = 0;
+
+    for (let pos = 1; pos < indexRoute.length; pos++) {
+        const prevIdx = indexRoute[pos - 1];
+        const currIdx = indexRoute[pos];
+        cumulativeDurationSec += safeMatrixValue(durationMatrix, prevIdx, currIdx);
+        const item = items[currIdx];
+        const priorityWeight = Number.isFinite(item?.priorityWeight) ? item.priorityWeight : 1;
+
+        if (priorityWeight > 1) {
+            // Prioridade alta em posições tardias aumenta o custo.
+            penalty += (priorityWeight - 1) * pos * avgCost * 0.18;
+        }
+
+        const etaMin = cumulativeDurationSec / 60;
+        if (Number.isFinite(item?.timeWindowEndMin) && etaMin > item.timeWindowEndMin) {
+            // Atraso recebe penalidade forte.
+            penalty += (etaMin - item.timeWindowEndMin) * avgCost * 0.07;
+        }
+        if (Number.isFinite(item?.timeWindowStartMin) && etaMin < item.timeWindowStartMin) {
+            // Chegada muito cedo também penaliza (tempo ocioso).
+            penalty += (item.timeWindowStartMin - etaMin) * avgCost * 0.02;
+        }
+    }
+
+    if (!roundTrip) {
+        const returnPenaltyFactor = PROFILE_RETURN_PENALTY[profile] ?? 0;
+        if (returnPenaltyFactor > 0 && indexRoute.length > 1) {
+            const endIdx = indexRoute[indexRoute.length - 1];
+            const returnCost = safeMatrixValue(costMatrix, endIdx, startIndex);
+            penalty += returnCost * returnPenaltyFactor;
+        }
+    }
+
+    return travelCost + penalty;
+};
+
 const nearestNeighborRoute = (matrix, startIndex, firstChoiceRank = 0) => {
     const n = matrix.length;
     const unvisited = new Set();
@@ -231,17 +323,22 @@ const getBestSequence = (items, startIndex, roundTrip) => {
 };
 
 // Reliable optimizer: exact TSP for small N, strong heuristic for large N + OSRM geometry.
-export const optimizeRoute = async (items, options = { roundTrip: false, startIndex: 0, optimizeBy: 'distance' }) => {
+export const optimizeRoute = async (items, options = { roundTrip: false, startIndex: 0, optimizeBy: 'distance', routeProfile: 'neutral' }) => {
     if (items.length < 2) return { orderedItems: items, geometry: null, distance: 0, duration: 0 };
 
     const startIdx = options.startIndex >= 0 && options.startIndex < items.length ? options.startIndex : 0;
     const optimizeBy = options.optimizeBy === 'duration' ? 'duration' : 'distance';
+    const routeProfile = resolveProfile(items, options.routeProfile || 'neutral');
+    const advancedConstraints = hasAdvancedConstraints(items);
     const baselineOrder = buildBaselineOrder(items.length, startIdx);
     const baselineRoute = baselineOrder.map((idx) => items[idx]);
     const baselineMetrics = await getOSRMRoute(baselineRoute, options.roundTrip);
+    const roadTable = await getOSRMTableMatrix(items);
     const attachBaseline = (result) => ({
         ...result,
         optimizeBy,
+        routeProfile,
+        advancedConstraints,
         baseline: {
             distance: baselineMetrics.distance,
             duration: baselineMetrics.duration
@@ -250,15 +347,15 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
 
     // Exact best route on real road costs for smaller inputs.
     // With <=11 points, this is still practical and guarantees optimality.
-    if (items.length <= 11) {
-        const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip, optimizeBy);
+    if (items.length <= 11 && !advancedConstraints && roadTable) {
+        const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip, optimizeBy, roadTable);
         if (exactRoad) {
             return attachBaseline(exactRoad);
         }
     }
 
     // Better road heuristic for larger inputs using OSRM matrix + 2-opt.
-    const roadHeuristic = await getRoadHeuristicOptimized(items, startIdx, options.roundTrip, optimizeBy);
+    const roadHeuristic = await getRoadHeuristicOptimized(items, startIdx, options.roundTrip, optimizeBy, routeProfile, roadTable);
     if (roadHeuristic) {
         return attachBaseline(roadHeuristic);
     }
@@ -271,7 +368,8 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
             meta: {
                 solver: 'osrm-trip',
                 exact: false,
-                costBasis: optimizeBy
+                costBasis: optimizeBy,
+                profile: routeProfile
             }
         });
     }
@@ -289,13 +387,13 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
         meta: {
             solver: 'local-haversine',
             exact: false,
-            costBasis: optimizeBy
+            costBasis: optimizeBy,
+            profile: routeProfile
         }
     });
 };
 
-const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance') => {
-    const table = await getOSRMTableMatrix(items);
+const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance', table = null) => {
     if (!table) return null;
 
     const costMatrix = selectCostMatrix(table, optimizeBy);
@@ -324,12 +422,12 @@ const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optim
     };
 };
 
-const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance') => {
-    const table = await getOSRMTableMatrix(items);
+const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance', routeProfile = 'neutral', table = null) => {
     if (!table) return null;
 
     const costMatrix = selectCostMatrix(table, optimizeBy);
     if (!costMatrix) return null;
+    const durationMatrix = table.durationMatrix || table.distanceMatrix;
 
     const n = items.length;
     const firstHopVariants = Math.min(12, n - 1);
@@ -339,7 +437,14 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
     for (let variant = 0; variant < firstHopVariants; variant++) {
         const seed = nearestNeighborRoute(costMatrix, startIndex, variant);
         const improved = twoOptImprove(seed, costMatrix, roundTrip);
-        const score = routeDistance(improved, costMatrix, roundTrip);
+        const score = routeScoreWithConstraints(improved, {
+            costMatrix,
+            durationMatrix,
+            items,
+            roundTrip,
+            startIndex,
+            profile: routeProfile
+        });
 
         if (score < bestScore) {
             bestScore = score;
@@ -363,6 +468,7 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
             solver: 'osrm-table-2opt',
             exact: false,
             costBasis: optimizeBy,
+            profile: routeProfile,
             selectedCost: routeDistance(bestIndexRoute, costMatrix, roundTrip),
             baselineCost: routeDistance(baselineRoute, costMatrix, roundTrip)
         }

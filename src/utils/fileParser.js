@@ -127,7 +127,50 @@ const processData = (data) => {
         zip: ['cep', 'zip', 'postal', 'cod_postal', 'zipcode', 'postal code'],
         lat: ['lat', 'latitude', 'y'],
         lon: ['lon', 'long', 'longitude', 'x'],
-        name: ['nome', 'cliente', 'razao_social', 'destinatario']
+        name: ['nome', 'cliente', 'razao_social', 'destinatario'],
+        priority: ['prioridade', 'priority', 'prio', 'urgencia', 'urgência'],
+        windowStart: ['janela_inicio', 'janela inicio', 'inicio_janela', 'start_time', 'hora_inicio', 'inicio'],
+        windowEnd: ['janela_fim', 'janela fim', 'fim_janela', 'end_time', 'hora_fim', 'fim'],
+        windowRange: ['janela', 'time_window', 'horario', 'horário', 'sla'],
+        platform: ['plataforma', 'marketplace', 'canal', 'origem']
+    };
+
+    const parsePriorityWeight = (value) => {
+        if (value === null || value === undefined || value === '') return 1;
+        const text = String(value).trim().toLowerCase();
+        if (!text) return 1;
+        if (['alta', 'high', 'urgente', 'critica', 'crítica', 'p1'].includes(text)) return 3;
+        if (['media', 'média', 'medium', 'normal', 'p2'].includes(text)) return 2;
+        if (['baixa', 'low', 'p3'].includes(text)) return 1;
+        const numeric = Number(text.replace(',', '.'));
+        if (!Number.isFinite(numeric)) return 1;
+        if (numeric >= 3) return 3;
+        if (numeric >= 2) return 2;
+        return 1;
+    };
+
+    const parseMinuteOfDay = (value) => {
+        if (value === null || value === undefined || value === '') return null;
+        const text = String(value).trim();
+        if (!text) return null;
+        const timeMatch = text.match(/^(\d{1,2}):(\d{2})$/);
+        if (!timeMatch) return null;
+        const hours = Number(timeMatch[1]);
+        const minutes = Number(timeMatch[2]);
+        if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+        return (hours * 60) + minutes;
+    };
+
+    const parseTimeWindowRange = (value) => {
+        const text = String(value ?? '').trim();
+        if (!text) return { start: null, end: null };
+        const rangeMatch = text.match(/(\d{1,2}:\d{2})\s*[-aA]\s*(\d{1,2}:\d{2})/);
+        if (!rangeMatch) return { start: null, end: null };
+        return {
+            start: parseMinuteOfDay(rangeMatch[1]),
+            end: parseMinuteOfDay(rangeMatch[2])
+        };
     };
 
     const findKey = (row, candidates) => {
@@ -159,6 +202,11 @@ const processData = (data) => {
         const stateKey = findKey(safeRow, maps.state);
         const zipKey = findKey(safeRow, maps.zip);
         const nameKey = findKey(safeRow, maps.name);
+        const priorityKey = findKey(safeRow, maps.priority);
+        const windowStartKey = findKey(safeRow, maps.windowStart);
+        const windowEndKey = findKey(safeRow, maps.windowEnd);
+        const windowRangeKey = findKey(safeRow, maps.windowRange);
+        const platformKey = findKey(safeRow, maps.platform);
 
         // Direct Coords detection
         const latK = findKey(safeRow, maps.lat);
@@ -182,6 +230,16 @@ const processData = (data) => {
         const latValue = latK ? parseFloat(String(safeRow[latK]).replace(',', '.')) : NaN;
         const lonValue = lonK ? parseFloat(String(safeRow[lonK]).replace(',', '.')) : NaN;
         const hasValidCoords = Number.isFinite(latValue) && Number.isFinite(lonValue);
+        const rangeWindow = windowRangeKey ? parseTimeWindowRange(safeRow[windowRangeKey]) : { start: null, end: null };
+        const timeWindowStart = windowStartKey ? parseMinuteOfDay(safeRow[windowStartKey]) : rangeWindow.start;
+        const timeWindowEnd = windowEndKey ? parseMinuteOfDay(safeRow[windowEndKey]) : rangeWindow.end;
+        const normalizedPlatformRaw = platformKey ? normalizeText(safeRow[platformKey]) : '';
+        const platform = normalizedPlatformRaw.includes('mercado livre')
+            ? 'mercado_livre'
+            : normalizedPlatformRaw.includes('shopee')
+                ? 'shopee'
+                : null;
+        const priorityWeight = priorityKey ? parsePriorityWeight(safeRow[priorityKey]) : 1;
 
         // Clean address construction
         let lookupString = String(fullAddress || '').trim();
@@ -197,6 +255,10 @@ const processData = (data) => {
             displayAddress: `${fullAddress}${city ? ', ' + city : ''}`.trim(),
             coords: hasValidCoords ? { lat: latValue, lon: lonValue } : null,
             status: 'pending',
+            priorityWeight,
+            platform,
+            timeWindowStartMin: Number.isFinite(timeWindowStart) ? timeWindowStart : null,
+            timeWindowEndMin: Number.isFinite(timeWindowEnd) ? timeWindowEnd : null,
             originalData: safeRow
         };
     }).filter((item) => {

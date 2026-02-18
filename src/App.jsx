@@ -41,6 +41,7 @@ function App() {
   const [roundTrip, setRoundTrip] = useState(false);
   const [startPointId, setStartPointId] = useState(null);
   const [optimizeBy, setOptimizeBy] = useState('distance');
+  const [routeProfile, setRouteProfile] = useState('neutral');
   const [stopStatuses, setStopStatuses] = useState({});
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 1024 : false);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -48,6 +49,7 @@ function App() {
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState('optimizer');
   const [showRouteSummary, setShowRouteSummary] = useState(false);
+  const [operationMode, setOperationMode] = useState(false);
   const [pendingActions, setPendingActions] = useState(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -91,10 +93,18 @@ function App() {
   }, [isOnline, pendingActions.length]);
 
   useWorkspacePersistence({
-    storageKey: WORKSPACE_KEY,
-    items, routeInfo, roundTrip, startPointId, optimizeBy, stopStatuses, status,
-    setItems, setRouteInfo, setRoundTrip, setStartPointId, setOptimizeBy, setStopStatuses, setStatus
+    storageKey: WORKSPACE_KEY, items, routeInfo, roundTrip, startPointId, optimizeBy, routeProfile, stopStatuses, status,
+    setItems, setRouteInfo, setRoundTrip, setStartPointId, setOptimizeBy, setRouteProfile, setStopStatuses, setStatus
   });
+
+  useEffect(() => {
+    if (!operationMode) return;
+    if (status !== 'ready') {
+      setOperationMode(false);
+      return;
+    }
+    setMobileView('map');
+  }, [operationMode, status]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -113,9 +123,11 @@ function App() {
     setRoundTrip(false);
     setStartPointId(null);
     setOptimizeBy('distance');
+    setRouteProfile('neutral');
     setStopStatuses({});
     setPendingActions([]);
     setShowRouteSummary(false);
+    setOperationMode(false);
     setMobileView('panel');
     localStorage.removeItem(WORKSPACE_KEY);
     localStorage.removeItem(ACTION_QUEUE_KEY);
@@ -140,6 +152,7 @@ function App() {
       setStartPointId(data[0]?.id ?? null);
       setStopStatuses({});
       setShowRouteSummary(false);
+      setOperationMode(false);
       setActiveTab('optimizer');
       setMobileView('panel');
       setStatus('idle');
@@ -171,12 +184,18 @@ function App() {
         setProgress((prev) => (prev < 97 ? prev + 1 : prev));
       }, 120);
       const sIdx = validItems.findIndex(i => String(i.id) === String(startPointId));
-      const res = await optimizeRoute(validItems, { roundTrip, startIndex: sIdx >= 0 ? sIdx : 0, optimizeBy });
+      const res = await optimizeRoute(validItems, {
+        roundTrip,
+        startIndex: sIdx >= 0 ? sIdx : 0,
+        optimizeBy,
+        routeProfile
+      });
       setProgress(100);
       setItems(res.orderedItems);
       setRouteInfo(res);
       setStopStatuses(buildInitialStopStatuses(res.orderedItems));
       setShowRouteSummary(false);
+      setOperationMode(false);
       setStatus('ready');
       if (isMobile) setMobileView('panel');
       const optimizedDistanceKm = Number.isFinite(res?.distance) ? res.distance / 1000 : null;
@@ -233,6 +252,11 @@ function App() {
   const savedMin = baselineMin !== null && optimizedMin !== null ? Math.max(0, baselineMin - optimizedMin) : null;
   const estimatedFuelCost = optimizedKm !== null ? (optimizedKm / autonomy) * fuelPrice : null;
   const routeObjectiveLabel = optimizeBy === 'duration' ? 'Menor tempo' : 'Menor distância';
+  const routeProfileLabel = routeProfile === 'mercado_livre'
+    ? 'Mercado Livre'
+    : routeProfile === 'shopee'
+      ? 'Shopee'
+      : 'Padrão';
   const routeQuality = (() => {
     if (baselineKm === null || optimizedKm === null || baselineKm <= 0) return null;
     const reductionPercent = ((baselineKm - optimizedKm) / baselineKm) * 100;
@@ -256,6 +280,7 @@ function App() {
       routeInfo,
       roundTrip,
       optimizeBy,
+      routeProfile,
       startPointId
     };
     persistHistory([entry, ...routeHistory].slice(0, 30));
@@ -331,6 +356,14 @@ function App() {
                               {items.map((it, i) => <option key={it.id} value={it.id}>{i + 1}. {it.address}</option>)}
                             </select>
                           </div>
+                          <div className="config-option">
+                            <span className="config-label">Perfil da operação</span>
+                            <select value={routeProfile} onChange={e => setRouteProfile(e.target.value)}>
+                              <option value="neutral">Padrão</option>
+                              <option value="shopee">Shopee</option>
+                              <option value="mercado_livre">Mercado Livre</option>
+                            </select>
+                          </div>
                           <Button variant="p" fullWidth size="lg" onClick={startOptimization}>
                             <Zap size={20} fill="white" /> Calcular rota
                           </Button>
@@ -355,6 +388,7 @@ function App() {
                         </div>
                         <div className="quick-overview-grid">
                           <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
+                          <span>Perfil: <b>{routeProfileLabel}</b></span>
                           <span>Entregues: <b>{deliveryStats.done}</b></span>
                           <span>Pendentes: <b>{deliveryStats.pending}</b></span>
                         </div>
@@ -407,6 +441,11 @@ function App() {
                           Salvar
                         </Button>
                       </div>
+                      {isMobile && (
+                        <Button variant="primary" fullWidth onClick={() => { setOperationMode(true); setMobileView('map'); }}>
+                          <Navigation size={16} /> Modo operação
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
                         {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
                       </Button>
@@ -452,9 +491,11 @@ function App() {
                     setRouteInfo(l.routeInfo || null);
                     setRoundTrip(Boolean(l.roundTrip));
                     setOptimizeBy(l.optimizeBy === 'duration' ? 'duration' : 'distance');
+                    setRouteProfile(l.routeProfile === 'shopee' || l.routeProfile === 'mercado_livre' ? l.routeProfile : 'neutral');
                     setStartPointId(l.startPointId ?? l.items?.[0]?.id ?? null);
                     setStopStatuses(buildInitialStopStatuses(l.items || []));
                     setStatus(l.routeInfo ? 'ready' : 'idle');
+                    setOperationMode(false);
                     setMobileView('panel');
                     setActiveTab('optimizer');
                   }} />
@@ -484,7 +525,7 @@ function App() {
           </Suspense>
 
           {/* Floating Mobile Map HUD */}
-          {isMobile && mobileView === 'map' && status === 'ready' && currentItem && (
+          {isMobile && !operationMode && mobileView === 'map' && status === 'ready' && currentItem && (
             <div className="hud-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <div className="status-glow" style={{ background: 'var(--primary)' }} />
@@ -501,11 +542,44 @@ function App() {
               </div>
             </div>
           )}
+
+          {isMobile && operationMode && status === 'ready' && (
+            <div className="operation-mode-overlay">
+              <div className="operation-mode-head">
+                <span>Modo operação</span>
+                <button type="button" className="operation-close-btn" onClick={() => setOperationMode(false)}>
+                  Sair
+                </button>
+              </div>
+              {currentItem ? (
+                <>
+                  <p className="operation-label">Próxima parada</p>
+                  <h2 className="operation-address">{currentItem.address}</h2>
+                  <button type="button" className="operation-btn operation-btn-primary" onClick={openCurrentNavigation}>
+                    <Navigation size={18} /> Navegar
+                  </button>
+                  <div className="operation-actions-grid">
+                    <button type="button" className="operation-btn operation-btn-success" onClick={() => markStatus(currentIdx, 'done')}>
+                      Entregue
+                    </button>
+                    <button type="button" className="operation-btn operation-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
+                      Falhou
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="operation-label">Rota finalizada</p>
+                  <h2 className="operation-address">Todas as paradas foram concluídas.</h2>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </main>
 
       {/* MOBILE CRYSTAL NAVIGATION PILL */}
-      {isMobile && (
+      {isMobile && !operationMode && (
         <nav className="mobile-nav-pill">
           <button
             className={`nav-item ${mobileView === 'panel' && activeTab === 'optimizer' ? 'active' : ''}`}
