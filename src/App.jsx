@@ -196,7 +196,10 @@ function App() {
       showToast('Sem internet: ação salva para sincronizar.', 'info');
       return;
     }
-    showToast(s === 'done' ? 'Entrega concluída!' : 'Falha registrada.', s === 'done' ? 'success' : 'error');
+    showToast(
+      s === 'done' ? 'Entrega marcada como concluída.' : 'Entrega marcada como não entregue.',
+      s === 'done' ? 'success' : 'error'
+    );
   };
 
   const currentIdx = items.findIndex((it, i) => i > 0 && stopStatuses[String(it.id)] !== 'done');
@@ -262,10 +265,10 @@ function App() {
                   {status === 'idle' && items.length === 0 && (
                     <div className="animate-slide-up" style={{ padding: '2rem 0', textAlign: 'center' }}>
                       <div style={{ marginBottom: '1.5rem', display: 'inline-flex', padding: '8px 16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--primary)', fontWeight: 700, fontSize: '0.85rem' }}>
-                        LOGÍSTICA INTELIGENTE v4
+                        PLANEJAMENTO DE ENTREGAS
                       </div>
-                      <h1 style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>Sua frota em outro nível.</h1>
-                      <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Aumente em até 40% a eficiência das suas rotas diárias.</p>
+                      <h1 style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>Otimize suas entregas</h1>
+                      <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Importe sua planilha e calcule a melhor rota.</p>
                       <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
                     </div>
                   )}
@@ -274,7 +277,7 @@ function App() {
                   {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
                     <div className="bento-card text-center">
                       <div className="loading-spinner" style={{ margin: '0 auto 1rem', width: '44px', height: '44px' }} />
-                      <h3 style={{ fontWeight: 800 }}>Sincronizando Dados</h3>
+                      <h3 style={{ fontWeight: 800 }}>Processando rota</h3>
                       <div className="progress-bar-track" style={{ height: '10px', marginTop: '1.5rem' }}>
                         <div className="progress-bar-fill" style={{ width: `${progress}%`, borderRadius: '10px' }} />
                       </div>
@@ -289,10 +292,10 @@ function App() {
                         <h3 style={{ fontWeight: 800, marginBottom: '1.25rem' }}>Definições da Rota</h3>
                         <div style={{ display: 'grid', gap: '1rem' }}>
                           <div className="config-option">
-                            <span className="config-label">Critério de Sucesso</span>
+                            <span className="config-label">Objetivo da rota</span>
                             <select value={optimizeBy} onChange={e => setOptimizeBy(e.target.value)}>
-                              <option value="distance">Distância Mínima</option>
-                              <option value="duration">Tempo Mínimo</option>
+                              <option value="distance">Menor distância</option>
+                              <option value="duration">Menor tempo</option>
                             </select>
                           </div>
                           <div className="config-option">
@@ -302,7 +305,7 @@ function App() {
                             </select>
                           </div>
                           <Button variant="p" fullWidth size="lg" onClick={startOptimization}>
-                            <Zap size={20} fill="white" /> OTIMIZAR AGORA
+                            <Zap size={20} fill="white" /> Calcular rota
                           </Button>
                         </div>
                       </div>
@@ -321,7 +324,7 @@ function App() {
                               <Navigation size={16} /> Navegar agora
                             </Button>
                             <Button variant="outline" onClick={() => markStatus(currentIdx, 'done')}>
-                              Concluir
+                              Entregue
                             </Button>
                           </div>
                         </div>
@@ -343,13 +346,13 @@ function App() {
                       />
 
                       <Button variant="o" fullWidth onClick={() => setStatus('idle')}>
-                        <RefreshCw size={16} /> Ajustar Rota
+                        <RefreshCw size={16} /> Recalcular rota
                       </Button>
                       <Button variant="outline" fullWidth onClick={saveCurrentRoute}>
                         Salvar no histórico
                       </Button>
                       <Button variant="outline" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
-                        {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
+                        {showRouteSummary ? 'Ocultar resumo' : 'Resumo da rota'}
                       </Button>
                       {showRouteSummary && (
                         <div className="bento-card" style={{ padding: '0.9rem' }}>

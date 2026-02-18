@@ -143,10 +143,10 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                                             <Copy size={13} /> Copiar
                                         </Button>
                                         <Button variant="outline" size="sm" onClick={() => onMarkDone?.(idx)}>
-                                            <CheckCircle2 size={13} /> Concluir
+                                            <CheckCircle2 size={13} /> Entregue
                                         </Button>
                                         <Button variant="outline" size="sm" onClick={() => onMarkFailed?.(idx)}>
-                                            <XCircle size={13} /> Falha
+                                            <XCircle size={13} /> Não entregue
                                         </Button>
                                     </div>
                                 )}
@@ -157,16 +157,16 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
             </Card>
 
             <Card style={{ padding: '0.9rem' }}>
-                <SectionHeader title="Ações de navegação" />
+                <SectionHeader title="Navegação externa" />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                     <Button variant="primary" onClick={openWaze}>
-                        <Navigation size={16} /> Abrir Waze
+                        <Navigation size={16} /> Abrir no Waze
                     </Button>
                     <Button variant="outline" onClick={openGoogleMaps}>
-                        <ExternalLink size={16} /> Abrir Maps
+                        <ExternalLink size={16} /> Abrir no Google Maps
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }}>
-                        Imprimir manifesto
+                        Imprimir rota
                     </Button>
                 </div>
             </Card>
