@@ -122,6 +122,22 @@ header {
   white-space: nowrap;
 }
 
+.btn-sm {
+  min-height: 36px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.82rem;
+}
+
+.btn-lg {
+  min-height: 52px;
+  padding: 0.9rem 1.2rem;
+  font-size: 0.98rem;
+}
+
+.btn-full {
+  width: 100%;
+}
+
 .mobile-main-action {
   min-height: 56px;
 }
@@ -146,6 +162,83 @@ header {
   background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.section-title {
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.section-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.status-badge-success {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.status-badge-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.status-badge-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.status-badge-info {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.status-badge-neutral {
+  background: rgba(100, 116, 139, 0.15);
+  color: #334155;
+}
+
+.mobile-view-toggle {
+  display: none;
+}
+
+.mobile-view-btn {
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.mobile-view-btn-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.mobile-hidden {
+  display: none !important;
 }
 
 .btn-primary {
@@ -178,6 +271,15 @@ header {
 
 .btn-outline:hover {
   background: var(--border);
+}
+
+.btn-danger {
+  background: var(--error);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(0.95);
 }
 
 .btn-icon {
@@ -300,6 +402,24 @@ header {
   }
 }
 
+@media (max-width: 900px) {
+  .main-content {
+    gap: 0.9rem;
+    padding: 0.85rem;
+  }
+
+  .mobile-view-toggle {
+    display: inline-flex;
+    gap: 0.4rem;
+    margin-right: 0.25rem;
+  }
+
+  .map-area .map-container-inner {
+    height: calc(100vh - 230px);
+    min-height: 360px;
+  }
+}
+
 .mobile-actions {
   position: fixed;
   bottom: 10px;
@@ -332,6 +452,32 @@ header {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
   padding: 1rem;
+}
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 96px;
+  z-index: 130;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+}
+
+.app-toast-info {
+  background: #2563eb;
+}
+
+.app-toast-success {
+  background: #059669;
+}
+
+.app-toast-error {
+  background: #dc2626;
 }
 
 .mobile-action-btn {

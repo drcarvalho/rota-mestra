@@ -92,13 +92,9 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
         tileErrorCountRef.current += 1;
         if (tileErrorCountRef.current < 8) return;
         tileErrorCountRef.current = 0;
+        setHasLoadedTile(false);
         setProviderIdx((idx) => Math.min(idx + 1, TILE_PROVIDERS.length - 1));
     };
-
-    useEffect(() => {
-        setHasLoadedTile(false);
-        tileErrorCountRef.current = 0;
-    }, [providerIdx]);
 
     return (
         <div style={{ height: '100%', width: '100%', position: 'relative', background: '#e5e7eb' }}>
@@ -141,7 +137,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
                             <Popup>
                                 <div style={{ textAlign: 'center' }}>
                                     <strong style={{ color: idx === 0 ? '#10b981' : markerColor }}>
-                                        {idx === 0 ? 'INICIO' : isNext ? `PROXIMA ${idx + 1}` : `ENTREGA ${idx + 1}`}
+                                        {idx === 0 ? 'INÍCIO' : isNext ? `PRÓXIMA ${idx + 1}` : `ENTREGA ${idx + 1}`}
                                     </strong>
                                     <p style={{ margin: '5px 0 0', fontSize: '12px' }}>{item.address}</p>
                                 </div>
@@ -165,7 +161,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
 
             {items.length === 0 && (
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, textAlign: 'center', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', boxShadow: 'var(--shadow)' }}>
-                    <p style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Aguardando enderecos...</p>
+                    <p style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Aguardando endereços...</p>
                 </div>
             )}
 
@@ -175,12 +171,16 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
 
             {!hasLoadedTile && (
                 <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 900, background: 'rgba(255,255,255,0.95)', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', border: '1px solid #d1d5db', maxWidth: '220px' }}>
-                    <p style={{ marginBottom: '6px', color: '#334155' }}>Carregando mapa... se não abrir, troque a base.</p>
+                    <p style={{ marginBottom: '6px', color: '#334155' }}>Carregando mapa. Se não abrir, altere a base.</p>
                     <button
                         style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 8px', background: '#fff', cursor: 'pointer' }}
-                        onClick={() => setProviderIdx((idx) => (idx + 1) % TILE_PROVIDERS.length)}
+                        onClick={() => {
+                            setHasLoadedTile(false);
+                            tileErrorCountRef.current = 0;
+                            setProviderIdx((idx) => (idx + 1) % TILE_PROVIDERS.length);
+                        }}
                     >
-                        Trocar Base
+                        Alterar base
                     </button>
                 </div>
             )}

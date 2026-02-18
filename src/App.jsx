@@ -5,9 +5,7 @@ import {
   Moon,
   Sun,
   Trash2,
-  X,
   RefreshCw,
-  ChevronRight,
   Calculator,
   ShieldCheck,
   AlertTriangle,
@@ -26,6 +24,10 @@ import { optimizeRoute } from './utils/optimizer';
 import MapView from './components/MapView';
 import FileUploader from './components/FileUploader';
 import RouteDetails from './components/RouteDetails';
+import Button from './components/ui/Button';
+import Card from './components/ui/Card';
+import SectionHeader from './components/ui/SectionHeader';
+import StatusBadge from './components/ui/StatusBadge';
 import './App.css';
 import confetti from 'canvas-confetti';
 
@@ -81,6 +83,9 @@ function App() {
   const [routeHistory, setRouteHistory] = useState([]);
   const [isFieldMode, setIsFieldMode] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth <= 900 : false);
+  const [mobileView, setMobileView] = useState('panel'); // panel, map
+  const [toast, setToast] = useState(null); // { message, type }
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('optimizer'); // optimizer, settings, history
 
@@ -138,13 +143,29 @@ function App() {
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
     const goOffline = () => setIsOnline(false);
+    const onResize = () => setIsMobileViewport(window.innerWidth <= 900);
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
+    window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
+      window.removeEventListener('resize', onResize);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport) return;
+    if (status === 'ready') setMobileView('map');
+  }, [isMobileViewport, status]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (message, type = 'info') => setToast({ message, type });
 
   const persistHistory = (nextHistory) => {
     setRouteHistory(nextHistory);
@@ -226,6 +247,7 @@ function App() {
       });
       setStopStatuses(buildInitialStopStatuses(optimized.orderedItems));
       setStatus('ready');
+      if (isMobileViewport) setMobileView('map');
 
       // Success Event
       confetti({
@@ -253,6 +275,7 @@ function App() {
       setStatus('idle');
       setProgress(0);
       setError(null);
+      setMobileView('panel');
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     }
   };
@@ -271,6 +294,7 @@ function App() {
     if (!item || idx === 0) return;
     const stopId = String(item.id);
     setStopStatuses((current) => ({ ...current, [stopId]: nextStatus }));
+    showToast(nextStatus === 'done' ? 'Entrega marcada como concluída.' : 'Entrega marcada como falha.', nextStatus === 'done' ? 'success' : 'error');
   };
 
   const saveCurrentRouteToHistory = () => {
@@ -288,6 +312,7 @@ function App() {
     };
     const nextHistory = [entry, ...routeHistory].slice(0, 20);
     persistHistory(nextHistory);
+    showToast('Rota salva no histórico.', 'success');
   };
 
   const loadHistoryRoute = (entry) => {
@@ -310,10 +335,17 @@ function App() {
     const stop = `${currentStop.coords.lat},${currentStop.coords.lon}`;
     const url = `https://waze.com/ul?ll=${stop}&navigate=yes`;
     window.open(url, '_blank');
+    showToast('Abrindo navegação para próxima parada.', 'info');
   };
 
-  const goToSidebar = () => sidebarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const goToMap = () => mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const goToSidebar = () => {
+    if (isMobileViewport) setMobileView('panel');
+    sidebarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const goToMap = () => {
+    if (isMobileViewport) setMobileView('map');
+    mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const nextPendingIndex = getNextPendingIndex();
   const currentStop = nextPendingIndex > 0 ? items[nextPendingIndex] : null;
   const progressDone = Math.max(0, items.slice(1).filter((item) => stopStatuses[String(item.id)] === 'done').length);
@@ -331,11 +363,22 @@ function App() {
             </div>
             <div className="hide-mobile">
               <h1 style={{ fontSize: '1.25rem', fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--primary)' }}>RotaMestra <span style={{ color: 'var(--text-main)' }}>Pro</span></h1>
-              <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Logística Urbana Avançada</p>
+              <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gestão de Rotas de Entrega</p>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {isMobileViewport && (
+              <div className="mobile-view-toggle">
+                <button className={`mobile-view-btn ${mobileView === 'panel' ? 'mobile-view-btn-active' : ''}`} onClick={() => setMobileView('panel')}>
+                  Painel
+                </button>
+                <button className={`mobile-view-btn ${mobileView === 'map' ? 'mobile-view-btn-active' : ''}`} onClick={() => setMobileView('map')}>
+                  Mapa
+                </button>
+              </div>
+            )}
+
             <div style={{ display: 'flex', background: 'var(--primary-light)', padding: '4px', borderRadius: '10px', marginRight: '0.5rem' }}>
               <button className={`btn btn-icon ${activeTab === 'optimizer' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('optimizer')} style={{ width: '36px', height: '36px' }}>
                 <LayoutDashboard size={18} />
@@ -359,9 +402,9 @@ function App() {
             )}
 
             {items.length > 0 && (
-              <button className="btn btn-primary" onClick={resetProject} style={{ background: 'var(--error)', border: 'none', borderRadius: '12px' }}>
-                <Trash2 size={18} /> <span className="hide-mobile">Novo</span>
-              </button>
+              <Button variant="danger" onClick={resetProject} style={{ borderRadius: '12px' }}>
+                <Trash2 size={18} /> <span className="hide-mobile">Limpar</span>
+              </Button>
             )}
           </div>
         </div>
@@ -369,24 +412,26 @@ function App() {
 
       <main className="main-content">
         {/* SIDEBAR ZONE */}
-        <aside className="sidebar-scroll" ref={sidebarRef}>
-          <div className="card">
+        <aside className={`sidebar-scroll ${isMobileViewport && mobileView === 'map' ? 'mobile-hidden' : ''}`} ref={sidebarRef}>
+          <Card>
             <h4 style={{ fontWeight: 800, marginBottom: '0.75rem', fontSize: '0.9rem' }}>Fluxo da Operação</h4>
             <div className="stepper-grid">
               <div className={`step-chip ${workflowStep >= 1 ? 'step-chip-active' : ''}`}>1. Importar</div>
               <div className={`step-chip ${workflowStep >= 2 ? 'step-chip-active' : ''}`}>2. Configurar</div>
               <div className={`step-chip ${workflowStep >= 3 ? 'step-chip-active' : ''}`}>3. Navegar</div>
             </div>
-          </div>
+          </Card>
 
           {activeTab === 'history' && (
-            <div className="card animate-fade-in">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontWeight: 800 }}>Histórico de Rotas</h3>
-                <button className="btn btn-outline" onClick={clearHistory} disabled={routeHistory.length === 0}>
-                  Limpar
-                </button>
-              </div>
+            <Card className="animate-fade-in">
+              <SectionHeader
+                title="Histórico de Rotas"
+                actions={(
+                  <Button variant="outline" size="sm" onClick={clearHistory} disabled={routeHistory.length === 0}>
+                    Limpar histórico
+                  </Button>
+                )}
+              />
               {routeHistory.length === 0 && (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhuma rota salva ainda.</p>
               )}
@@ -403,32 +448,32 @@ function App() {
                   </button>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
 
           {activeTab === 'settings' && (
-            <div className="card animate-fade-in">
-              <h3 style={{ fontWeight: 800, marginBottom: '0.8rem' }}>Preferências</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                O app salva automaticamente seu progresso no navegador para continuar depois.
+            <Card className="animate-fade-in">
+              <SectionHeader title="Preferências" />
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '-0.25rem' }}>
+                O sistema salva automaticamente seu progresso no navegador para continuar depois.
               </p>
               <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                <button className="btn btn-outline" onClick={() => localStorage.removeItem(WORKSPACE_STORAGE_KEY)}>
+                <Button variant="outline" onClick={() => localStorage.removeItem(WORKSPACE_STORAGE_KEY)}>
                   Limpar Sessão Salva
-                </button>
-                <button className="btn btn-outline" onClick={clearHistory}>
+                </Button>
+                <Button variant="outline" onClick={clearHistory}>
                   Limpar Histórico de Rotas
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* 1. WELCOME & DATA INPUT */}
           {activeTab === 'optimizer' && status === 'idle' && items.length === 0 && (
             <div className="animate-fade-in">
               <div style={{ marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>Bem-vindo ao Futuro das Entregas.</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Otimize suas rotas de entrega em segundos com tecnologia aeroespacial para logística.</p>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>Planeje suas entregas com eficiência.</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Importe os pedidos, ajuste os parâmetros e gere a melhor sequência de rota.</p>
               </div>
               <FileUploader onUpload={handleFileUpload} />
 
@@ -436,8 +481,8 @@ function App() {
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   <ShieldCheck size={24} color="var(--primary)" />
                   <div>
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Privacidade Garantida</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Seus dados são processados localmente e nunca armazenados em nossos servidores.</p>
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Privacidade local</h4>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Seus dados são processados no navegador e não são armazenados em nossos servidores.</p>
                   </div>
                 </div>
               </div>
@@ -450,12 +495,12 @@ function App() {
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <AlertTriangle color="var(--error)" size={20} />
                 <div>
-                  <h4 style={{ color: 'var(--error)', fontWeight: 700 }}>Erro no Processamento</h4>
+                  <h4 style={{ color: 'var(--error)', fontWeight: 700 }}>Erro no processamento</h4>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginTop: '4px' }}>{error}</p>
                 </div>
               </div>
               <button className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', background: 'var(--error)' }} onClick={() => setError(null)}>
-                Corrigir e Tentar Novamente
+                Tentar novamente
               </button>
             </div>
           )}
@@ -465,8 +510,8 @@ function App() {
             <div className="card animate-fade-in">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                 <div>
-                  <h3 style={{ fontWeight: 800 }}>{status === 'geocoding' ? 'Mapeando Endereços' : status === 'optimizing' ? 'Inteligência de Rota' : 'Processando Arquivo'}</h3>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Executando algoritmos TSP v4.2</p>
+                  <h3 style={{ fontWeight: 800 }}>{status === 'geocoding' ? 'Geocodificando endereços' : status === 'optimizing' ? 'Otimizando rota' : 'Processando arquivo'}</h3>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Processamento em andamento</p>
                 </div>
                 <div className="loading-spinner" />
               </div>
@@ -562,7 +607,7 @@ function App() {
                 </div>
 
                 <button className="btn btn-primary mobile-main-action" onClick={runRouteOptimizer} style={{ width: '100%', marginTop: '1.25rem', padding: '1.25rem' }}>
-                  <Calculator size={22} /> CALCULAR MELHOR ROTA
+                  <Calculator size={22} /> OTIMIZAR ROTA
                 </button>
               </div>
 
@@ -592,7 +637,14 @@ function App() {
                 stopStatuses={stopStatuses}
                 onMarkDone={(idx) => markStopStatus(idx, 'done')}
                 onMarkFailed={(idx) => markStopStatus(idx, 'failed')}
-                onCopyAddress={(address) => navigator.clipboard?.writeText(address || '')}
+                onCopyAddress={async (address) => {
+                  try {
+                    await navigator.clipboard?.writeText(address || '');
+                    showToast('Endereço copiado.', 'success');
+                  } catch {
+                    showToast('Não foi possível copiar o endereço.', 'error');
+                  }
+                }}
               />
 
               <div className="card" style={{ marginTop: '1rem' }}>
@@ -608,11 +660,11 @@ function App() {
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Próxima parada</p>
                     <p style={{ fontWeight: 700, marginBottom: '0.75rem' }}>{currentStop.address}</p>
                     <button className="btn btn-primary" style={{ width: '100%', marginBottom: '0.6rem' }} onClick={openCurrentStopNavigation}>
-                      <Navigation size={16} /> Navegar 1 Toque
+                      <Navigation size={16} /> Abrir navegação
                     </button>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                       <button className="btn btn-primary" onClick={() => markStopStatus(nextPendingIndex, 'done')}>Concluir</button>
-                      <button className="btn btn-outline" onClick={() => markStopStatus(nextPendingIndex, 'failed')}>Falhou</button>
+                      <button className="btn btn-outline" onClick={() => markStopStatus(nextPendingIndex, 'failed')}>Falha</button>
                     </div>
                   </div>
                 ) : (
@@ -625,6 +677,12 @@ function App() {
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   Modo: <b>{routeInfo.optimizeBy === 'duration' ? 'Menor Tempo' : 'Menor Distância'}</b>
                 </p>
+                <div style={{ marginTop: '0.4rem' }}>
+                  <StatusBadge
+                    tone={routeInfo.optimizeBy === 'duration' ? 'info' : 'neutral'}
+                    label={routeInfo.optimizeBy === 'duration' ? 'Otimização por tempo' : 'Otimização por distância'}
+                  />
+                </div>
                 {routeInfo.quality && (
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                     Ganho estimado vs ordem original: <b>{routeInfo.quality.gainPercent.toFixed(1)}%</b>
@@ -636,14 +694,14 @@ function App() {
               </div>
 
               <button className="btn btn-outline" style={{ width: '100%', marginTop: '1rem', padding: '1rem', color: 'var(--primary)', borderColor: 'var(--primary)' }} onClick={() => setStatus('idle')}>
-                <RefreshCw size={18} /> Editar Paradas ou Configuração
+                <RefreshCw size={18} /> Ajustar rota
               </button>
             </div>
           )}
         </aside>
 
         {/* MAP ZONE */}
-        <section className="map-area" ref={mapRef}>
+        <section className={`map-area ${isMobileViewport && mobileView === 'panel' ? 'mobile-hidden' : ''}`} ref={mapRef}>
           <div className="card map-container-inner" style={{ padding: 0, boxShadow: 'var(--shadow-lg)' }}>
             <MapView
               items={items}
@@ -657,10 +715,11 @@ function App() {
               <div className="card hide-mobile" style={{ background: 'rgba(var(--card-bg-rgb, 255, 255, 255), 0.9)', backdropFilter: 'blur(8px)', padding: '0.75rem 1rem', border: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--success)' }} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>Sistema Live</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>Sistema ativo</span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '8px' }}>Bauru / SP</span>
-                  <span style={{ fontSize: '0.75rem', color: isOnline ? 'var(--success)' : 'var(--error)', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />} {isOnline ? 'Online' : 'Offline'}
+                  <span style={{ marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {isOnline ? <Wifi size={12} color="#059669" /> : <WifiOff size={12} color="#dc2626" />}
+                    <StatusBadge tone={isOnline ? 'success' : 'error'} label={isOnline ? 'Online' : 'Offline'} />
                   </span>
                 </div>
               </div>
@@ -681,18 +740,18 @@ function App() {
             </div>
           </div>
           <p style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            &copy; 2026 RotaMestra Pro. A ferramenta preferida dos entregadores de elite.<br />
-            <span style={{ opacity: 0.6 }}>Otimizado para logística de última milha no Brasil.</span>
+            &copy; 2026 RotaMestra Pro. Gestão de rotas para operação de entregas.<br />
+            <span style={{ opacity: 0.6 }}>Planejamento de última milha para equipes no Brasil.</span>
           </p>
         </div>
       </footer>
 
       <div className="mobile-actions">
         <button className="mobile-action-btn" onClick={goToSidebar}>
-          Config
+          Painel
         </button>
         <button className="mobile-action-btn mobile-action-primary" onClick={runRouteOptimizer} disabled={items.length === 0 || status !== 'idle'}>
-          <Play size={18} /> Rota
+          <Play size={18} /> Otimizar
         </button>
         <button className="mobile-action-btn" onClick={goToMap}>
           Mapa
@@ -704,7 +763,7 @@ function App() {
           <div className="field-mode-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 900 }}>Modo Campo</h3>
-              <button className="btn btn-outline" onClick={() => setIsFieldMode(false)}>Fechar</button>
+              <button className="btn btn-outline" onClick={() => setIsFieldMode(false)}>Sair</button>
             </div>
             <p style={{ marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
               {progressDone}/{progressTotal} entregas concluídas
@@ -715,11 +774,11 @@ function App() {
                 <p style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '0.25rem' }}>{currentStop.address}</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.6rem', marginTop: '1rem' }}>
                   <button className="btn btn-primary" style={{ minHeight: '58px', fontSize: '1.05rem' }} onClick={openCurrentStopNavigation}>
-                    <Navigation size={20} /> Abrir Navegação
+                    <Navigation size={20} /> Abrir navegação
                   </button>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                     <button className="btn btn-primary" style={{ minHeight: '58px', fontSize: '1rem' }} onClick={() => markStopStatus(nextPendingIndex, 'done')}>Concluir</button>
-                    <button className="btn btn-outline" style={{ minHeight: '58px', fontSize: '1rem' }} onClick={() => markStopStatus(nextPendingIndex, 'failed')}>Falhou</button>
+                    <button className="btn btn-outline" style={{ minHeight: '58px', fontSize: '1rem' }} onClick={() => markStopStatus(nextPendingIndex, 'failed')}>Falha</button>
                   </div>
                 </div>
               </div>
@@ -730,6 +789,12 @@ function App() {
               {isOnline ? 'Conectado' : 'Sem conexão: mudanças ficam salvas no aparelho'}
             </p>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`app-toast app-toast-${toast.type}`}>
+          {toast.message}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileText, AlertCircle, CheckCircle2, CloudUpload } from 'lucide-react';
+import { FileText, CheckCircle2, CloudUpload } from 'lucide-react';
+import Card from './ui/Card';
 
 const FileUploader = ({ onUpload }) => {
     const fileInputRef = useRef(null);
@@ -33,12 +34,12 @@ const FileUploader = ({ onUpload }) => {
         if (['csv', 'xlsx', 'xls'].includes(ext)) {
             onUpload(file);
         } else {
-            alert('Por favor, envie um arquivo CSV ou Excel funcional.');
+            alert('Envie um arquivo CSV ou Excel (.xlsx/.xls).');
         }
     };
 
     return (
-        <div className="card animate-fade-in" style={{ padding: '0.5rem' }}>
+        <Card className="animate-fade-in" style={{ padding: '0.5rem' }}>
             <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
@@ -78,10 +79,10 @@ const FileUploader = ({ onUpload }) => {
                 </div>
 
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                    Importar Minha Rota
+                    Importar arquivo de entregas
                 </h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', maxWidth: '240px', margin: '0 auto' }}>
-                    Arraste seu <b>CSV</b> ou <b>Excel</b> aqui ou clique para procurar.
+                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b> ou clique para selecionar.
                 </p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '2rem' }}>
@@ -103,11 +104,11 @@ const FileUploader = ({ onUpload }) => {
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
                     <div style={{ marginTop: '2px' }}><CheckCircle2 size={16} color="var(--success)" /></div>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                        <b>Detecção Automática:</b> Nosso motor identifica colunas de Endereço, Nome, CEP e Coordenadas automaticamente.
+                        <b>Detecção automática:</b> o sistema identifica colunas de endereço, nome, CEP e coordenadas.
                     </p>
                 </div>
             </div>
-        </div>
+        </Card>
     );
 };
 

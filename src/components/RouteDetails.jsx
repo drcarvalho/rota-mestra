@@ -9,6 +9,10 @@ import {
     XCircle,
     Copy
 } from 'lucide-react';
+import Card from './ui/Card';
+import Button from './ui/Button';
+import SectionHeader from './ui/SectionHeader';
+import StatusBadge from './ui/StatusBadge';
 
 const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed, onCopyAddress }) => {
     const fuelPrice = 5.80;
@@ -77,14 +81,14 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', animation: 'fadeIn 0.5s ease' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div className="card" style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '1rem' }}>
-                    <div style={{ opacity: 0.8, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px' }}>ROTA TOTAL</div>
+                    <div style={{ opacity: 0.8, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px' }}>DISTÂNCIA TOTAL</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{totalKm} km</div>
                     <div style={{ fontSize: '0.7rem', opacity: 0.9, marginTop: '4px' }}>
                         <Clock size={10} /> {hours}h {mins}m direção
                     </div>
                 </div>
                 <div className="card" style={{ background: 'var(--success)', color: 'white', border: 'none', padding: '1rem' }}>
-                    <div style={{ opacity: 0.8, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px' }}>CUSTO COMBUSTÍVEL</div>
+                    <div style={{ opacity: 0.8, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px' }}>CUSTO DE COMBUSTÍVEL</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>R$ {estimatedFuelCost.toFixed(2)}</div>
                     <div style={{ fontSize: '0.7rem', opacity: 0.9, marginTop: '4px' }}>Ref: R$ {fuelPrice.toFixed(2)}/L</div>
                 </div>
@@ -92,32 +96,37 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
 
             <div className="card" style={{ padding: '0.75rem', background: '#eff6ff' }}>
                 <div style={{ fontSize: '0.78rem', color: '#1e40af' }}>
-                    Tempo total estimado com as entregas: <b>{Math.floor(estimatedDeliveryTime / 60)}h {estimatedDeliveryTime % 60}m</b>.
+                    Tempo total estimado com paradas: <b>{Math.floor(estimatedDeliveryTime / 60)}h {estimatedDeliveryTime % 60}m</b>.
                 </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <button className="btn btn-primary" onClick={openGoogleMaps}>
+                <Button variant="primary" onClick={openGoogleMaps}>
                     <ExternalLink size={18} /> Google Maps
-                </button>
-                <button className="btn btn-outline" onClick={openWaze}>
-                    <Navigation size={18} /> Abrir Waze
-                </button>
+                </Button>
+                <Button variant="outline" onClick={openWaze}>
+                    <Navigation size={18} /> Navegar no Waze
+                </Button>
             </div>
 
-            <div className="card" style={{ padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-                        <MapPin size={18} color="var(--primary)" /> Sequência Operacional
-                    </h4>
-                    <button className="btn btn-outline btn-icon" onClick={exportCSV} title="Exportar para Excel/CSV">
-                        <Download size={18} />
-                    </button>
-                </div>
+            <Card style={{ padding: '1rem' }}>
+                <SectionHeader
+                    title={(
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
+                            <MapPin size={18} color="var(--primary)" /> Sequência de Entregas
+                        </span>
+                    )}
+                    actions={(
+                        <Button variant="outline" className="btn-icon" onClick={exportCSV} title="Exportar para Excel/CSV">
+                            <Download size={18} />
+                        </Button>
+                    )}
+                />
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '460px', overflowY: 'auto' }}>
                     {items.map((item, idx) => {
                         const meta = statusMeta(item, idx);
+                        const badgeTone = meta.label === 'Entregue' ? 'success' : meta.label === 'Falhou' ? 'error' : meta.label === 'Pendente' ? 'warning' : 'info';
                         return (
                             <div key={item.id} style={{
                                 display: 'flex',
@@ -148,31 +157,31 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
                                         <p style={{ fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                             {idx === 0 ? 'Ponto de Partida' : item.address}
                                         </p>
-                                        <p style={{ fontSize: '0.7rem', color: meta.color, fontWeight: 700 }}>{meta.label}</p>
+                                        <StatusBadge tone={badgeTone} label={meta.label} />
                                     </div>
                                 </div>
                                 {idx > 0 && (
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.45rem' }}>
-                                        <button className="btn btn-outline" style={{ minHeight: '38px', padding: '0.45rem 0.5rem' }} onClick={() => onCopyAddress?.(item.address)}>
+                                        <Button variant="outline" size="sm" onClick={() => onCopyAddress?.(item.address)}>
                                             <Copy size={14} /> Copiar
-                                        </button>
-                                        <button className="btn btn-outline" style={{ minHeight: '38px', padding: '0.45rem 0.5rem' }} onClick={() => onMarkDone?.(idx)}>
-                                            <CheckCircle2 size={14} /> Entregue
-                                        </button>
-                                        <button className="btn btn-outline" style={{ minHeight: '38px', padding: '0.45rem 0.5rem' }} onClick={() => onMarkFailed?.(idx)}>
-                                            <XCircle size={14} /> Falhou
-                                        </button>
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => onMarkDone?.(idx)}>
+                                            <CheckCircle2 size={14} /> Concluir
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => onMarkFailed?.(idx)}>
+                                            <XCircle size={14} /> Falha
+                                        </Button>
                                     </div>
                                 )}
                             </div>
                         );
                     })}
                 </div>
-            </div>
+            </Card>
 
             <div style={{ textAlign: 'center' }}>
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Otimização com OSRM + status operacional em campo.
+                    Rota calculada com OSRM e acompanhamento operacional.
                 </p>
             </div>
         </div>
