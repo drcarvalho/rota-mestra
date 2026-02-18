@@ -320,6 +320,29 @@ function App() {
     persistHistory([entry, ...routeHistory].slice(0, 30));
     showToast('Rota salva no histórico.', 'success');
   };
+  const processingLabel = status === 'uploading'
+    ? 'Lendo planilha'
+    : status === 'geocoding'
+      ? 'Localizando endereços'
+      : 'Calculando melhor rota';
+  const detectedCity = (() => {
+    const cityCounter = new Map();
+    items.forEach((item) => {
+      const parts = String(item?.address || '').split(',').map((p) => p.trim()).filter(Boolean);
+      const city = parts.length >= 3 ? parts[parts.length - 3] : null;
+      if (!city || city.toLowerCase() === 'brasil') return;
+      cityCounter.set(city, (cityCounter.get(city) || 0) + 1);
+    });
+    let best = null;
+    let bestCount = 0;
+    cityCounter.forEach((count, city) => {
+      if (count > bestCount) {
+        best = city;
+        bestCount = count;
+      }
+    });
+    return best;
+  })();
 
   return (
     <div className="app-shell">
@@ -353,8 +376,14 @@ function App() {
                   {status === 'idle' && items.length === 0 && (
                     <div className="animate-slide-up clean-empty-state">
                       <h1 style={{ fontSize: '1.55rem', fontWeight: 800, lineHeight: 1.12, marginBottom: '0.55rem' }}>RotaBoa</h1>
-                      <p className="clean-muted" style={{ marginBottom: '1.1rem' }}>Sua entrega no caminho certo.</p>
+                      <p className="clean-muted" style={{ marginBottom: '0.8rem' }}>Organize suas entregas em segundos.</p>
                       <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
+                      <div className="quick-start-steps">
+                        <span>1. Importe a planilha</span>
+                        <span>2. Toque em otimizar</span>
+                        <span>3. Inicie pelo próximo endereço</span>
+                      </div>
+                      <p className="clean-muted" style={{ marginTop: '0.85rem' }}>Compatível com Shopee e Mercado Livre.</p>
                     </div>
                   )}
 
@@ -362,7 +391,7 @@ function App() {
                   {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
                     <div className="bento-card text-center">
                       <div className="loading-spinner" style={{ margin: '0 auto 1rem', width: '44px', height: '44px' }} />
-                      <h3 style={{ fontWeight: 800 }}>Calculando rota</h3>
+                      <h3 style={{ fontWeight: 800 }}>{processingLabel}</h3>
                       <div className="progress-bar-track" style={{ height: '10px', marginTop: '1.5rem' }}>
                         <div className="progress-bar-fill" style={{ width: `${progress}%`, borderRadius: '10px' }} />
                       </div>
@@ -375,9 +404,9 @@ function App() {
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div className="bento-card">
                         <h3 style={{ fontWeight: 800, marginBottom: '0.7rem' }}>Configurar rota</h3>
-                        <p className="clean-muted" style={{ marginBottom: '0.75rem' }}>
-                          {Math.max(0, items.length - 1)} parada(s) carregada(s).
-                        </p>
+                        <div className="import-ready-pill">Planilha carregada com sucesso</div>
+                        <p className="clean-muted" style={{ marginBottom: '0.35rem' }}>{Math.max(0, items.length - 1)} parada(s).</p>
+                        {detectedCity && <p className="clean-muted" style={{ marginBottom: '0.75rem' }}>Região principal: {detectedCity}</p>}
                         <div style={{ display: 'grid', gap: '0.7rem', marginBottom: '0.8rem' }}>
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowAdvancedConfig((v) => !v)}>
                             {showAdvancedConfig ? 'Esconder opções avançadas' : 'Ver opções avançadas'}
@@ -409,7 +438,7 @@ function App() {
                               </div>
                             </>
                           )}
-                          <Button variant="p" fullWidth size="lg" onClick={startOptimization}>
+                          <Button variant="p" fullWidth size="lg" className="sticky-optimize-btn" onClick={startOptimization}>
                             <Zap size={20} fill="white" /> Otimizar rota
                           </Button>
                         </div>

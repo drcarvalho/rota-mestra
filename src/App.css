@@ -808,6 +808,40 @@ header {
   color: var(--text-muted);
 }
 
+.quick-start-steps {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.quick-start-steps span {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(var(--bg-rgb), 0.5);
+  padding: 0.38rem 0.5rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.import-ready-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.58rem;
+  border-radius: 999px;
+  background: rgba(var(--success-rgb), 0.1);
+  color: var(--success);
+  font-size: 0.74rem;
+  font-weight: 800;
+  margin-bottom: 0.55rem;
+}
+
+.sticky-optimize-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
 .clean-next-stop-card {
   border-left: 3px solid var(--primary);
 }
