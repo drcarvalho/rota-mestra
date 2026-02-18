@@ -1,35 +1,29 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import {
-  Truck,
   Play,
-  Moon,
-  Sun,
-  Trash2,
   RefreshCw,
   Calculator,
-  ShieldCheck,
   AlertTriangle,
-  History,
-  LayoutDashboard,
-  Settings as SettingsIcon,
-  HelpCircle,
   Navigation,
   Wifi,
-  WifiOff,
-  LocateFixed
+  WifiOff
 } from 'lucide-react';
 import { parseFile } from './utils/fileParser';
 import { geocodeBatch } from './utils/geocoding';
 import { optimizeRoute } from './utils/optimizer';
-import MapView from './components/MapView';
 import FileUploader from './components/FileUploader';
 import RouteDetails from './components/RouteDetails';
 import Button from './components/ui/Button';
 import Card from './components/ui/Card';
-import SectionHeader from './components/ui/SectionHeader';
 import StatusBadge from './components/ui/StatusBadge';
+import TopBar from './components/app/TopBar';
+import HistoryPanel from './components/app/HistoryPanel';
+import SettingsPanel from './components/app/SettingsPanel';
+import { useWorkspacePersistence, useRouteHistory } from './hooks/useRoutePersistence';
 import './App.css';
 import confetti from 'canvas-confetti';
+
+const MapView = lazy(() => import('./components/MapView'));
 
 const WORKSPACE_STORAGE_KEY = 'rota_mestra_workspace_v1';
 const ROUTE_HISTORY_STORAGE_KEY = 'rota_mestra_history_v1';
@@ -80,7 +74,6 @@ function App() {
   const [startPointId, setStartPointId] = useState(null);
   const [optimizeBy, setOptimizeBy] = useState('distance'); // distance, duration
   const [stopStatuses, setStopStatuses] = useState({});
-  const [routeHistory, setRouteHistory] = useState([]);
   const [isFieldMode, setIsFieldMode] = useState(false);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth <= 900 : false);
@@ -88,57 +81,32 @@ function App() {
   const [toast, setToast] = useState(null); // { message, type }
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('optimizer'); // optimizer, settings, history
+  const { routeHistory, persistHistory } = useRouteHistory(ROUTE_HISTORY_STORAGE_KEY);
 
   // Theme Management
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     setIsDarkMode(savedTheme === 'dark');
     document.documentElement.setAttribute('data-theme', savedTheme);
-
-    const savedWorkspace = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-    if (!savedWorkspace) return;
-
-    try {
-      const parsed = JSON.parse(savedWorkspace);
-      if (Array.isArray(parsed.items)) setItems(parsed.items);
-      if (parsed.routeInfo && typeof parsed.routeInfo === 'object') setRouteInfo(parsed.routeInfo);
-      if (typeof parsed.roundTrip === 'boolean') setRoundTrip(parsed.roundTrip);
-      if (parsed.startPointId !== undefined && parsed.startPointId !== null) setStartPointId(parsed.startPointId);
-      if (parsed.optimizeBy === 'distance' || parsed.optimizeBy === 'duration') setOptimizeBy(parsed.optimizeBy);
-      if (parsed.stopStatuses && typeof parsed.stopStatuses === 'object') setStopStatuses(parsed.stopStatuses);
-      if (parsed.status === 'ready' && parsed.routeInfo && Array.isArray(parsed.items) && parsed.items.length > 0) {
-        setStatus('ready');
-      }
-    } catch (workspaceError) {
-      console.error('Falha ao restaurar dados locais:', workspaceError);
-    }
   }, []);
 
-  useEffect(() => {
-    if (status === 'uploading' || status === 'geocoding' || status === 'optimizing') return;
-
-    const payload = {
-      items,
-      routeInfo,
-      roundTrip,
-      startPointId,
-      optimizeBy,
-      stopStatuses,
-      status: status === 'ready' ? 'ready' : 'idle'
-    };
-    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(payload));
-  }, [items, routeInfo, roundTrip, startPointId, optimizeBy, stopStatuses, status]);
-
-  useEffect(() => {
-    const savedHistory = localStorage.getItem(ROUTE_HISTORY_STORAGE_KEY);
-    if (!savedHistory) return;
-    try {
-      const parsed = JSON.parse(savedHistory);
-      if (Array.isArray(parsed)) setRouteHistory(parsed);
-    } catch (historyError) {
-      console.error('Falha ao restaurar histórico:', historyError);
-    }
-  }, []);
+  useWorkspacePersistence({
+    storageKey: WORKSPACE_STORAGE_KEY,
+    items,
+    routeInfo,
+    roundTrip,
+    startPointId,
+    optimizeBy,
+    stopStatuses,
+    status,
+    setItems,
+    setRouteInfo,
+    setRoundTrip,
+    setStartPointId,
+    setOptimizeBy,
+    setStopStatuses,
+    setStatus
+  });
 
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
@@ -156,7 +124,10 @@ function App() {
 
   useEffect(() => {
     if (!isMobileViewport) return;
-    if (status === 'ready') setMobileView('map');
+    if (status === 'ready') {
+      setMobileView('panel');
+      setIsFieldMode(false);
+    }
   }, [isMobileViewport, status]);
 
   useEffect(() => {
@@ -166,11 +137,6 @@ function App() {
   }, [toast]);
 
   const showToast = (message, type = 'info') => setToast({ message, type });
-
-  const persistHistory = (nextHistory) => {
-    setRouteHistory(nextHistory);
-    localStorage.setItem(ROUTE_HISTORY_STORAGE_KEY, JSON.stringify(nextHistory));
-  };
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode ? 'dark' : 'light';
@@ -234,6 +200,11 @@ function App() {
       const baselineKm = getHaversineDistance(successfulItems, roundTrip);
       const optimizedKm = getHaversineDistance(optimized.orderedItems, roundTrip);
       const gainRatio = baselineKm > 0 ? ((baselineKm - optimizedKm) / baselineKm) * 100 : 0;
+      const roadBaseline = optimized?.meta?.baselineCost;
+      const roadSelected = optimized?.meta?.selectedCost;
+      const roadGainPercent = Number.isFinite(roadBaseline) && roadBaseline > 0 && Number.isFinite(roadSelected)
+        ? Math.max(0, ((roadBaseline - roadSelected) / roadBaseline) * 100)
+        : null;
       setProgress(100);
 
       setItems(optimized.orderedItems);
@@ -242,7 +213,8 @@ function App() {
         quality: {
           baselineKm,
           optimizedKm,
-          gainPercent: Math.max(0, gainRatio)
+          gainPercent: Math.max(0, gainRatio),
+          roadGainPercent
         }
       });
       setStopStatuses(buildInitialStopStatuses(optimized.orderedItems));
@@ -266,7 +238,7 @@ function App() {
   };
 
   const resetProject = () => {
-    if (confirm('Deseja limpar todos os dados e começar de novo?')) {
+    if (window.confirm('Deseja limpar todos os dados e começar de novo?')) {
       setItems([]);
       setRouteInfo(null);
       setStartPointId(null);
@@ -278,6 +250,20 @@ function App() {
       setMobileView('panel');
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     }
+  };
+
+  const clearSavedWorkspace = () => {
+    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    setItems([]);
+    setRouteInfo(null);
+    setRoundTrip(false);
+    setStartPointId(null);
+    setOptimizeBy('distance');
+    setStopStatuses({});
+    setStatus('idle');
+    setProgress(0);
+    setError(null);
+    showToast('Sessão local removida.', 'success');
   };
 
   const getNextPendingIndex = () => {
@@ -351,64 +337,32 @@ function App() {
   const progressDone = Math.max(0, items.slice(1).filter((item) => stopStatuses[String(item.id)] === 'done').length);
   const progressTotal = Math.max(0, items.length - 1);
   const workflowStep = status === 'ready' ? 3 : items.length > 0 ? 2 : 1;
+  const isRouteReady = status === 'ready' && items.length > 0;
+  const canNavigateNow = isRouteReady && Boolean(currentStop?.coords);
+  const handlePrimaryMobileAction = () => {
+    if (canNavigateNow) {
+      openCurrentStopNavigation();
+      return;
+    }
+    runRouteOptimizer();
+  };
 
   return (
     <div className="app-container">
-      {/* PROFESSIONAL NAVBAR */}
-      <header>
-        <div style={{ maxWidth: '1440px', margin: '0 auto', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px', borderRadius: '12px', display: 'flex' }}>
-              <Truck size={24} strokeWidth={2.5} />
-            </div>
-            <div className="hide-mobile">
-              <h1 style={{ fontSize: '1.25rem', fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--primary)' }}>RotaMestra <span style={{ color: 'var(--text-main)' }}>Pro</span></h1>
-              <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gestão de Rotas de Entrega</p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {isMobileViewport && (
-              <div className="mobile-view-toggle">
-                <button className={`mobile-view-btn ${mobileView === 'panel' ? 'mobile-view-btn-active' : ''}`} onClick={() => setMobileView('panel')}>
-                  Painel
-                </button>
-                <button className={`mobile-view-btn ${mobileView === 'map' ? 'mobile-view-btn-active' : ''}`} onClick={() => setMobileView('map')}>
-                  Mapa
-                </button>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', background: 'var(--primary-light)', padding: '4px', borderRadius: '10px', marginRight: '0.5rem' }}>
-              <button className={`btn btn-icon ${activeTab === 'optimizer' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('optimizer')} style={{ width: '36px', height: '36px' }}>
-                <LayoutDashboard size={18} />
-              </button>
-              <button className={`btn btn-icon ${activeTab === 'settings' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('settings')} style={{ width: '36px', height: '36px' }}>
-                <SettingsIcon size={18} />
-              </button>
-              <button className={`btn btn-icon ${activeTab === 'history' ? 'btn-primary' : ''}`} onClick={() => setActiveTab('history')} style={{ width: '36px', height: '36px' }}>
-                <History size={18} />
-              </button>
-            </div>
-
-            <button className="btn btn-outline btn-icon" onClick={toggleTheme} style={{ borderRadius: '12px' }}>
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-
-            {status === 'ready' && (
-              <button className={`btn ${isFieldMode ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsFieldMode((v) => !v)} style={{ borderRadius: '12px' }}>
-                <LocateFixed size={18} /> <span className="hide-mobile">Modo Campo</span>
-              </button>
-            )}
-
-            {items.length > 0 && (
-              <Button variant="danger" onClick={resetProject} style={{ borderRadius: '12px' }}>
-                <Trash2 size={18} /> <span className="hide-mobile">Limpar</span>
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
+      <TopBar
+        isMobileViewport={isMobileViewport}
+        mobileView={mobileView}
+        setMobileView={setMobileView}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        toggleTheme={toggleTheme}
+        isDarkMode={isDarkMode}
+        status={status}
+        isFieldMode={isFieldMode}
+        setIsFieldMode={setIsFieldMode}
+        itemsLength={items.length}
+        onReset={resetProject}
+      />
 
       <main className="main-content">
         {/* SIDEBAR ZONE */}
@@ -423,69 +377,20 @@ function App() {
           </Card>
 
           {activeTab === 'history' && (
-            <Card className="animate-fade-in">
-              <SectionHeader
-                title="Histórico de Rotas"
-                actions={(
-                  <Button variant="outline" size="sm" onClick={clearHistory} disabled={routeHistory.length === 0}>
-                    Limpar histórico
-                  </Button>
-                )}
-              />
-              {routeHistory.length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhuma rota salva ainda.</p>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '420px', overflowY: 'auto' }}>
-                {routeHistory.map((entry) => (
-                  <button
-                    key={entry.id}
-                    className="btn btn-outline"
-                    style={{ justifyContent: 'space-between', width: '100%', textAlign: 'left' }}
-                    onClick={() => loadHistoryRoute(entry)}
-                  >
-                    <span>{entry.title}</span>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{entry.items?.length || 0} paradas</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
+            <HistoryPanel routeHistory={routeHistory} onClear={clearHistory} onLoad={loadHistoryRoute} />
           )}
 
           {activeTab === 'settings' && (
-            <Card className="animate-fade-in">
-              <SectionHeader title="Preferências" />
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '-0.25rem' }}>
-                O sistema salva automaticamente seu progresso no navegador para continuar depois.
-              </p>
-              <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                <Button variant="outline" onClick={() => localStorage.removeItem(WORKSPACE_STORAGE_KEY)}>
-                  Limpar Sessão Salva
-                </Button>
-                <Button variant="outline" onClick={clearHistory}>
-                  Limpar Histórico de Rotas
-                </Button>
-              </div>
-            </Card>
+            <SettingsPanel onClearWorkspace={clearSavedWorkspace} onClearHistory={clearHistory} />
           )}
 
           {/* 1. WELCOME & DATA INPUT */}
           {activeTab === 'optimizer' && status === 'idle' && items.length === 0 && (
             <div className="animate-fade-in">
               <div style={{ marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>Planeje suas entregas com eficiência.</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Importe os pedidos, ajuste os parâmetros e gere a melhor sequência de rota.</p>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>Importe e otimize sua rota.</h2>
               </div>
-              <FileUploader onUpload={handleFileUpload} />
-
-              <div className="card" style={{ marginTop: '1.5rem', borderLeft: '4px solid var(--primary)', background: 'var(--primary-light)' }}>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <ShieldCheck size={24} color="var(--primary)" />
-                  <div>
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Privacidade local</h4>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Seus dados são processados no navegador e não são armazenados em nossos servidores.</p>
-                  </div>
-                </div>
-              </div>
+              <FileUploader onUpload={handleFileUpload} onValidationError={(message) => showToast(message, 'error')} />
             </div>
           )}
 
@@ -537,8 +442,7 @@ function App() {
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="card">
                 <div style={{ marginBottom: '1rem' }}>
-                  <h3 style={{ fontWeight: 800 }}>Configuração da Rota</h3>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ajuste os parâmetros para máxima eficiência</p>
+                  <h3 style={{ fontWeight: 800 }}>Configurar rota</h3>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -584,9 +488,6 @@ function App() {
                           </option>
                         ))}
                       </select>
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        A rota será otimizada a partir desse endereço.
-                      </p>
                     </label>
                   </div>
 
@@ -600,7 +501,6 @@ function App() {
                       />
                       <div>
                         <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Retornar ao Início</span>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Ideal para delivery com retorno à base/LJ.</p>
                       </div>
                     </label>
                   </div>
@@ -611,20 +511,6 @@ function App() {
                 </button>
               </div>
 
-              <div className="card">
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 800, marginBottom: '1rem' }}>Resumo da Importação ({items.length})</h4>
-                <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                  {items.map((item, idx) => (
-                    <div key={item.id} className="animate-slide-in" style={{ padding: '0.75rem', borderBottom: '1px solid var(--border)', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', width: '20px' }}>{idx + 1}</span>
-                      <div style={{ overflow: 'hidden' }}>
-                        <p style={{ fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.address}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
@@ -685,7 +571,7 @@ function App() {
                 </div>
                 {routeInfo.quality && (
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                    Ganho estimado vs ordem original: <b>{routeInfo.quality.gainPercent.toFixed(1)}%</b>
+                    Ganho da rota: <b>{routeInfo.quality.gainPercent.toFixed(1)}%</b>
                   </p>
                 )}
                 <button className="btn btn-outline" style={{ width: '100%', marginTop: '0.8rem' }} onClick={saveCurrentRouteToHistory}>
@@ -703,12 +589,15 @@ function App() {
         {/* MAP ZONE */}
         <section className={`map-area ${isMobileViewport && mobileView === 'panel' ? 'mobile-hidden' : ''}`} ref={mapRef}>
           <div className="card map-container-inner" style={{ padding: 0, boxShadow: 'var(--shadow-lg)' }}>
-            <MapView
-              items={items}
-              routeGeometry={routeInfo?.geometry}
-              stopStatuses={stopStatuses}
-              nextStopIndex={nextPendingIndex}
-            />
+            <Suspense fallback={<div className="map-loading">Carregando mapa...</div>}>
+              <MapView
+                items={items}
+                routeGeometry={routeInfo?.geometry}
+                stopStatuses={stopStatuses}
+                nextStopIndex={nextPendingIndex}
+                isVisible={!(isMobileViewport && mobileView === 'panel')}
+              />
+            </Suspense>
 
             {/* Floating Map Overlay */}
             <div style={{ position: 'absolute', bottom: '20px', left: '20px', zIndex: 1000, pointerEvents: 'none' }}>
@@ -724,34 +613,40 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {isMobileViewport && mobileView === 'map' && status === 'ready' && currentStop && !isFieldMode && (
+              <div className="driver-hud">
+                <p className="driver-hud-title">Proxima parada</p>
+                <p className="driver-hud-address">{currentStop.address}</p>
+                <div className="driver-hud-actions">
+                  <button className="btn btn-primary" onClick={openCurrentStopNavigation}>
+                    <Navigation size={18} /> Navegar
+                  </button>
+                  <button className="btn btn-outline" onClick={() => markStopStatus(nextPendingIndex, 'done')}>
+                    Concluir
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </main>
 
-      {/* PRO FOOTER */}
-      <footer style={{ background: 'var(--card-bg)', borderTop: '1px solid var(--border)', padding: '1.5rem', zIndex: 10 }}>
-        <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-              <History size={14} /> <span>Histórico de Rotas</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-              <HelpCircle size={14} /> <span>Central de Ajuda</span>
-            </div>
-          </div>
-          <p style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            &copy; 2026 RotaMestra Pro. Gestão de rotas para operação de entregas.<br />
-            <span style={{ opacity: 0.6 }}>Planejamento de última milha para equipes no Brasil.</span>
-          </p>
-        </div>
+      <footer className="app-footer">
+        <p>&copy; 2026 RotaMestra Pro · Planejamento de entregas de ultima milha</p>
       </footer>
 
       <div className="mobile-actions">
         <button className="mobile-action-btn" onClick={goToSidebar}>
           Painel
         </button>
-        <button className="mobile-action-btn mobile-action-primary" onClick={runRouteOptimizer} disabled={items.length === 0 || status !== 'idle'}>
-          <Play size={18} /> Otimizar
+        <button
+          className="mobile-action-btn mobile-action-primary"
+          onClick={handlePrimaryMobileAction}
+          disabled={canNavigateNow ? false : (items.length === 0 || status !== 'idle')}
+        >
+          {canNavigateNow ? <Navigation size={18} /> : <Play size={18} />}
+          {canNavigateNow ? 'Navegar' : 'Otimizar'}
         </button>
         <button className="mobile-action-btn" onClick={goToMap}>
           Mapa
@@ -762,7 +657,7 @@ function App() {
         <div className="field-mode-overlay">
           <div className="field-mode-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 900 }}>Modo Campo</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 900 }}>Modo motorista</h3>
               <button className="btn btn-outline" onClick={() => setIsFieldMode(false)}>Sair</button>
             </div>
             <p style={{ marginTop: '0.4rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>

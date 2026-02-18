@@ -16,7 +16,7 @@ function ChangeView({ bounds }) {
     return null;
 }
 
-function EnsureMapResize() {
+function EnsureMapResize({ isVisible }) {
     const map = useMap();
     useEffect(() => {
         const runInvalidate = () => {
@@ -44,6 +44,18 @@ function EnsureMapResize() {
         };
     }, [map]);
 
+    useEffect(() => {
+        if (!isVisible) return;
+        const timer = setTimeout(() => {
+            try {
+                map.invalidateSize();
+            } catch {
+                // noop
+            }
+        }, 120);
+        return () => clearTimeout(timer);
+    }, [isVisible, map]);
+
     return null;
 }
 
@@ -70,7 +82,7 @@ const TILE_PROVIDERS = [
     }
 ];
 
-const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }) => {
+const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, isVisible = true }) => {
     const [providerIdx, setProviderIdx] = useState(0);
     const [hasLoadedTile, setHasLoadedTile] = useState(false);
     const tileErrorCountRef = useRef(0);
@@ -114,7 +126,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
                         tileload: () => setHasLoadedTile(true)
                     }}
                 />
-                <EnsureMapResize />
+                <EnsureMapResize isVisible={isVisible} />
 
                 {items.map((item, idx) => {
                     if (!hasValidCoords(item)) return null;

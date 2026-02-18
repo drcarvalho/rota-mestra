@@ -10,6 +10,8 @@
   --error-light: #fef2f2;
   --bg: #f8fafc;
   --card-bg: #ffffff;
+  --bg-rgb: 248, 250, 252;
+  --card-bg-rgb: 255, 255, 255;
   --text-main: #0f172a;
   --text-muted: #64748b;
   --border: #e2e8f0;
@@ -24,6 +26,8 @@
 [data-theme='dark'] {
   --bg: #020617;
   --card-bg: #1e293b;
+  --bg-rgb: 2, 6, 23;
+  --card-bg-rgb: 30, 41, 59;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --border: #334155;
@@ -39,7 +43,7 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
   background-color: var(--bg);
   color: var(--text-main);
   line-height: 1.6;
@@ -47,10 +51,21 @@ body {
   overflow-x: hidden;
 }
 
+h1,
+h2,
+h3,
+h4 {
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  letter-spacing: -0.02em;
+}
+
 .app-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background:
+    radial-gradient(1200px 700px at 10% -10%, rgba(37, 99, 235, 0.08), transparent 50%),
+    radial-gradient(900px 500px at 110% 0%, rgba(16, 185, 129, 0.08), transparent 45%);
 }
 
 header {
@@ -62,6 +77,61 @@ header {
   -webkit-backdrop-filter: blur(12px);
   background: rgba(var(--card-bg-rgb, 255, 255, 255), 0.8);
   border-bottom: 1px solid var(--border);
+}
+
+.topbar-shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.brand-icon {
+  background: var(--primary);
+  color: #fff;
+  padding: 10px;
+  border-radius: 12px;
+  display: flex;
+}
+
+.brand-title {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: var(--primary);
+}
+
+.brand-title-sub {
+  color: var(--text-main);
+}
+
+.brand-subtitle {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.topbar-tabs {
+  display: flex;
+  background: var(--primary-light);
+  padding: 4px;
+  border-radius: 10px;
 }
 
 .main-content {
@@ -120,6 +190,13 @@ header {
   border: none;
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+.btn:focus-visible,
+.mobile-action-btn:focus-visible,
+.mobile-view-btn:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
 }
 
 .btn-sm {
@@ -364,6 +441,16 @@ header {
   overflow: hidden;
 }
 
+.map-loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
 .leaflet-container {
   width: 100%;
   height: 100%;
@@ -418,11 +505,44 @@ header {
     height: calc(100vh - 230px);
     min-height: 360px;
   }
+
+  .topbar-shell {
+    padding: 0 0.75rem;
+    gap: 0.45rem;
+  }
+
+  .topbar-actions {
+    gap: 0.4rem;
+  }
+
+  .mobile-view-toggle {
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--primary-light);
+  }
+
+  .mobile-view-btn {
+    min-height: 34px;
+    padding: 0.3rem 0.62rem;
+    font-size: 0.76rem;
+  }
+
+  .topbar-tabs {
+    padding: 3px;
+    border-radius: 12px;
+  }
+
+  .topbar-tabs .btn-icon,
+  .topbar-actions > .btn-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
 }
 
 .mobile-actions {
   position: fixed;
-  bottom: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
   left: 10px;
   right: 10px;
   display: none;
@@ -505,8 +625,53 @@ header {
   border-color: var(--primary);
 }
 
+.app-footer {
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  padding: 0.85rem 1rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.driver-hud {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 84px;
+  z-index: 950;
+  background: rgba(var(--card-bg-rgb, 255, 255, 255), 0.96);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 0.7rem;
+}
+
+.driver-hud-title {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.driver-hud-address {
+  font-size: 0.88rem;
+  font-weight: 800;
+  margin-top: 0.2rem;
+}
+
+.driver-hud-actions {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
 @media (max-width: 900px) {
   .mobile-actions {
     display: grid;
+  }
+
+  .app-footer {
+    display: none;
   }
 }

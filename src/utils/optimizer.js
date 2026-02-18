@@ -42,6 +42,14 @@ const routeDistance = (route, matrix, roundTrip = false) => {
     return total;
 };
 
+const buildBaselineOrder = (length, startIndex) => {
+    const baseline = [startIndex];
+    for (let i = 0; i < length; i++) {
+        if (i !== startIndex) baseline.push(i);
+    }
+    return baseline;
+};
+
 const nearestNeighborRoute = (matrix, startIndex, firstChoiceRank = 0) => {
     const n = matrix.length;
     const unvisited = new Set();
@@ -247,7 +255,15 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
     // Fallback road optimizer for larger inputs.
     const tripOptimized = await getOSRMTripOptimized(items, startIdx, options.roundTrip);
     if (tripOptimized) {
-        return { ...tripOptimized, optimizeBy };
+        return {
+            ...tripOptimized,
+            optimizeBy,
+            meta: {
+                solver: 'osrm-trip',
+                exact: false,
+                costBasis: optimizeBy
+            }
+        };
     }
 
     // Fallback: local optimizer + OSRM route geometry.
@@ -260,7 +276,12 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
         geometry: pathData.geometry,
         distance: pathData.distance,
         duration: pathData.duration,
-        optimizeBy
+        optimizeBy,
+        meta: {
+            solver: 'local-haversine',
+            exact: false,
+            costBasis: optimizeBy
+        }
     };
 };
 
@@ -277,11 +298,20 @@ const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optim
     const route = indexRoute.map((idx) => items[idx]);
     const pathData = await getOSRMRoute(route, roundTrip);
 
+    const baselineRoute = buildBaselineOrder(items.length, startIndex);
+
     return {
         orderedItems: route,
         geometry: pathData.geometry,
         distance: pathData.distance,
-        duration: pathData.duration
+        duration: pathData.duration,
+        meta: {
+            solver: 'osrm-table-held-karp',
+            exact: true,
+            costBasis: optimizeBy,
+            selectedCost: routeDistance(indexRoute, costMatrix, roundTrip),
+            baselineCost: routeDistance(baselineRoute, costMatrix, roundTrip)
+        }
     };
 };
 
@@ -313,11 +343,20 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
     const route = bestIndexRoute.map((idx) => items[idx]);
     const pathData = await getOSRMRoute(route, roundTrip);
 
+    const baselineRoute = buildBaselineOrder(items.length, startIndex);
+
     return {
         orderedItems: route,
         geometry: pathData.geometry,
         distance: pathData.distance,
-        duration: pathData.duration
+        duration: pathData.duration,
+        meta: {
+            solver: 'osrm-table-2opt',
+            exact: false,
+            costBasis: optimizeBy,
+            selectedCost: routeDistance(bestIndexRoute, costMatrix, roundTrip),
+            baselineCost: routeDistance(baselineRoute, costMatrix, roundTrip)
+        }
     };
 };
 

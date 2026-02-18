@@ -26,8 +26,6 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
     const hours = Math.floor(totalMinutes / 60);
     const mins = totalMinutes % 60;
     const estimatedFuelCost = (totalKmNum / autonomy) * fuelPrice;
-    const estimatedDeliveryTime = totalMinutes + (items.length * 5);
-
     const openGoogleMaps = () => {
         if (items.length < 2) return;
         const origin = items[0].address;
@@ -90,13 +88,7 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
                 <div className="card" style={{ background: 'var(--success)', color: 'white', border: 'none', padding: '1rem' }}>
                     <div style={{ opacity: 0.8, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px' }}>CUSTO DE COMBUSTÍVEL</div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>R$ {estimatedFuelCost.toFixed(2)}</div>
-                    <div style={{ fontSize: '0.7rem', opacity: 0.9, marginTop: '4px' }}>Ref: R$ {fuelPrice.toFixed(2)}/L</div>
-                </div>
-            </div>
-
-            <div className="card" style={{ padding: '0.75rem', background: '#eff6ff' }}>
-                <div style={{ fontSize: '0.78rem', color: '#1e40af' }}>
-                    Tempo total estimado com paradas: <b>{Math.floor(estimatedDeliveryTime / 60)}h {estimatedDeliveryTime % 60}m</b>.
+                    <div style={{ fontSize: '0.7rem', opacity: 0.9, marginTop: '4px' }}>Base atual</div>
                 </div>
             </div>
 
@@ -178,12 +170,6 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
                     })}
                 </div>
             </Card>
-
-            <div style={{ textAlign: 'center' }}>
-                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Rota calculada com OSRM e acompanhamento operacional.
-                </p>
-            </div>
         </div>
     );
 };

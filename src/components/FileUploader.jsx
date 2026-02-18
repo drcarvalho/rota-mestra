@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { FileText, CheckCircle2, CloudUpload } from 'lucide-react';
+import { FileText, CloudUpload } from 'lucide-react';
 import Card from './ui/Card';
 
-const FileUploader = ({ onUpload }) => {
+const FileUploader = ({ onUpload, onValidationError }) => {
     const fileInputRef = useRef(null);
     const [isDragActive, setIsDragActive] = useState(false);
 
@@ -34,7 +34,7 @@ const FileUploader = ({ onUpload }) => {
         if (['csv', 'xlsx', 'xls'].includes(ext)) {
             onUpload(file);
         } else {
-            alert('Envie um arquivo CSV ou Excel (.xlsx/.xls).');
+            onValidationError?.('Formato inválido. Envie CSV ou Excel (.xlsx/.xls).');
         }
     };
 
@@ -45,6 +45,15 @@ const FileUploader = ({ onUpload }) => {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                    }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Selecionar arquivo de entregas"
                 style={{
                     border: '2px dashed var(--border)',
                     borderColor: isDragActive ? 'var(--primary)' : 'var(--border)',
@@ -98,15 +107,6 @@ const FileUploader = ({ onUpload }) => {
                     accept=".csv, .xlsx, .xls"
                     onChange={handleChange}
                 />
-            </div>
-
-            <div style={{ padding: '1.25rem' }}>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                    <div style={{ marginTop: '2px' }}><CheckCircle2 size={16} color="var(--success)" /></div>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                        <b>Detecção automática:</b> o sistema identifica colunas de endereço, nome, CEP e coordenadas.
-                    </p>
-                </div>
             </div>
         </Card>
     );
