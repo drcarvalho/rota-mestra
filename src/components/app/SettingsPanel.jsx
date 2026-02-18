@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Trash2, History, Shield, HardDrive, Moon, Sun, LayoutGrid } from 'lucide-react';
+import { Settings, Trash2, History, Moon, Sun, LayoutGrid } from 'lucide-react';
 import Card from '../ui/Card';
 import SectionHeader from '../ui/SectionHeader';
 import Button from '../ui/Button';
@@ -23,37 +23,9 @@ const SettingsPanel = ({
             />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {/* Info section */}
-                <div style={{
-                    padding: '0.85rem',
-                    background: 'var(--primary-light)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(var(--primary-rgb), 0.08)'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                        <HardDrive size={14} color="var(--primary)" />
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary)' }}>Armazenamento Local</span>
-                    </div>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                        Seus dados ficam salvos no navegador. Nenhuma informação é enviada para servidores externos.
-                    </p>
-                </div>
-
-                {/* Privacy */}
-                <div style={{
-                    padding: '0.85rem',
-                    background: 'rgba(var(--success-rgb), 0.04)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(var(--success-rgb), 0.1)'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                        <Shield size={14} color="var(--success)" />
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--success)' }}>Privacidade</span>
-                    </div>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                        A geocodificação usa OpenStreetMap (Nominatim) e as rotas são calculadas via OSRM — ambos gratuitos e de código aberto.
-                    </p>
-                </div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    Ajustes rápidos do aplicativo.
+                </p>
 
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>

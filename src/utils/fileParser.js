@@ -133,6 +133,8 @@ const processData = (data) => {
         windowEnd: ['janela_fim', 'janela fim', 'fim_janela', 'end_time', 'hora_fim', 'fim'],
         windowRange: ['janela', 'time_window', 'horario', 'horário', 'sla'],
         platform: ['plataforma', 'marketplace', 'canal', 'origem']
+        ,
+        observation: ['observacao', 'observação', 'obs', 'referencia', 'referência', 'complemento', 'nota', 'note']
     };
 
     const parsePriorityWeight = (value) => {
@@ -207,6 +209,7 @@ const processData = (data) => {
         const windowEndKey = findKey(safeRow, maps.windowEnd);
         const windowRangeKey = findKey(safeRow, maps.windowRange);
         const platformKey = findKey(safeRow, maps.platform);
+        const observationKey = findKey(safeRow, maps.observation);
 
         // Direct Coords detection
         const latK = findKey(safeRow, maps.lat);
@@ -240,6 +243,7 @@ const processData = (data) => {
                 ? 'shopee'
                 : null;
         const priorityWeight = priorityKey ? parsePriorityWeight(safeRow[priorityKey]) : 1;
+        const observation = observationKey ? String(safeRow[observationKey] ?? '').trim() : '';
 
         // Clean address construction
         let lookupString = String(fullAddress || '').trim();
@@ -257,6 +261,7 @@ const processData = (data) => {
             status: 'pending',
             priorityWeight,
             platform,
+            observation: observation || null,
             timeWindowStartMin: Number.isFinite(timeWindowStart) ? timeWindowStart : null,
             timeWindowEndMin: Number.isFinite(timeWindowEnd) ? timeWindowEnd : null,
             originalData: safeRow

@@ -1,6 +1,6 @@
 {
-  "name": "RotaMestra Pro",
-  "short_name": "RotaMestra",
+  "name": "RotaBoa",
+  "short_name": "RotaBoa",
   "description": "Otimizador de rotas para entregas de Shopee e Mercado Livre.",
   "start_url": "/",
   "scope": "/",
@@ -10,9 +10,10 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/vite.svg",
+      "src": "/rotaboa-icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

@@ -7,7 +7,7 @@ export const geocodeAddress = async (address) => {
             const response = await fetch(url, {
                 headers: {
                     'Accept-Language': 'pt-BR',
-                    'User-Agent': 'RotaMestra-App-v2'
+                    'User-Agent': 'RotaBoa-App-v2'
                 }
             });
             if (!response.ok) return null;

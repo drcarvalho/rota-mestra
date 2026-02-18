@@ -34,7 +34,7 @@ const TopBar = ({
                     </div>
                     <div className="hide-mobile">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <h1 className="brand-title">RotaMestra <span className="brand-title-sub">Pro</span></h1>
+                            <h1 className="brand-title">RotaBoa</h1>
                             <span className="version-tag">v2.0</span>
                         </div>
                         <p className="brand-subtitle">Otimizador de Rotas Inteligente</p>

@@ -24,6 +24,7 @@ const WORKSPACE_KEY = 'rota_mestra_v4_elite';
 const HISTORY_KEY = 'rota_mestra_v4_history';
 const ACTION_QUEUE_KEY = 'rota_mestra_action_queue_v1';
 const hasValidCoords = (item) => Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
+const isStopResolved = (statusValue) => statusValue === 'done' || statusValue === 'failed';
 const buildInitialStopStatuses = (routeItems) => routeItems.reduce((acc, item, idx) => {
   acc[String(item.id)] = idx === 0 ? 'done' : 'pending';
   return acc;
@@ -32,7 +33,14 @@ const buildInitialStopStatuses = (routeItems) => routeItems.reduce((acc, item, i
 function App() {
   const fuelPrice = 5.8;
   const autonomy = 12;
-  const initialTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') || 'light' : 'light';
+  const initialTheme = (() => {
+    if (typeof window === 'undefined') return 'light';
+    try {
+      return localStorage.getItem('theme') || 'light';
+    } catch {
+      return 'light';
+    }
+  })();
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState('idle');
   const [progress, setProgress] = useState(0);
@@ -49,6 +57,9 @@ function App() {
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState('optimizer');
   const [showRouteSummary, setShowRouteSummary] = useState(false);
+  const [showStopList, setShowStopList] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
   const [operationMode, setOperationMode] = useState(false);
   const [pendingActions, setPendingActions] = useState(() => {
     if (typeof window === 'undefined') return [];
@@ -83,13 +94,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(pendingActions));
+    try {
+      localStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(pendingActions));
+    } catch {
+      // noop
+    }
   }, [pendingActions]);
 
   useEffect(() => {
     if (!isOnline || pendingActions.length === 0) return;
     setPendingActions([]);
-    showToast('Ações offline sincronizadas.', 'success');
+    showToast('Dados offline enviados.', 'success');
   }, [isOnline, pendingActions.length]);
 
   useWorkspacePersistence({
@@ -127,17 +142,28 @@ function App() {
     setStopStatuses({});
     setPendingActions([]);
     setShowRouteSummary(false);
+    setShowStopList(false);
+    setShowMoreTools(false);
+    setShowAdvancedConfig(false);
     setOperationMode(false);
     setMobileView('panel');
-    localStorage.removeItem(WORKSPACE_KEY);
-    localStorage.removeItem(ACTION_QUEUE_KEY);
-    showToast('Sessão reiniciada.', 'info');
+    try {
+      localStorage.removeItem(WORKSPACE_KEY);
+      localStorage.removeItem(ACTION_QUEUE_KEY);
+    } catch {
+      // noop
+    }
+    showToast('Rota atual foi limpa.', 'info');
   };
 
   const toggleTheme = () => {
     const nextTheme = !isDarkMode ? 'dark' : 'light';
     setIsDarkMode(!isDarkMode);
-    localStorage.setItem('theme', nextTheme);
+    try {
+      localStorage.setItem('theme', nextTheme);
+    } catch {
+      // noop
+    }
   };
 
   const handleUpload = async (file) => {
@@ -152,11 +178,14 @@ function App() {
       setStartPointId(data[0]?.id ?? null);
       setStopStatuses({});
       setShowRouteSummary(false);
+      setShowStopList(false);
+      setShowMoreTools(false);
+      setShowAdvancedConfig(false);
       setOperationMode(false);
       setActiveTab('optimizer');
       setMobileView('panel');
       setStatus('idle');
-      showToast('Dados consolidados!', 'success');
+      showToast('Planilha carregada com sucesso.', 'success');
     } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
   };
 
@@ -174,7 +203,7 @@ function App() {
       });
       const validItems = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
       if (!validItems.length) {
-        throw new Error('Nenhum endereço válido foi localizado.');
+        throw new Error('Não foi possível localizar os endereços da planilha.');
       }
 
       setStatus('optimizing');
@@ -195,6 +224,9 @@ function App() {
       setRouteInfo(res);
       setStopStatuses(buildInitialStopStatuses(res.orderedItems));
       setShowRouteSummary(false);
+      setShowStopList(false);
+      setShowMoreTools(false);
+      setShowAdvancedConfig(false);
       setOperationMode(false);
       setStatus('ready');
       if (isMobile) setMobileView('panel');
@@ -225,13 +257,17 @@ function App() {
       return;
     }
     showToast(
-      s === 'done' ? 'Entrega marcada como concluída.' : 'Entrega marcada como não entregue.',
+      s === 'done' ? 'Entrega marcada como concluída.' : 'Parada marcada como não entregue.',
       s === 'done' ? 'success' : 'error'
     );
   };
 
-  const currentIdx = items.findIndex((it, i) => i > 0 && stopStatuses[String(it.id)] !== 'done');
+  const currentIdx = items.findIndex((it, i) => i > 0 && !isStopResolved(stopStatuses[String(it.id)]));
   const currentItem = currentIdx > 0 ? items[currentIdx] : null;
+  const upcomingStops = items
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item, idx }) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending')
+    .slice(0, 4);
   const deliveryStats = items.reduce((acc, item, idx) => {
     if (idx === 0) return acc;
     acc.total += 1;
@@ -252,11 +288,6 @@ function App() {
   const savedMin = baselineMin !== null && optimizedMin !== null ? Math.max(0, baselineMin - optimizedMin) : null;
   const estimatedFuelCost = optimizedKm !== null ? (optimizedKm / autonomy) * fuelPrice : null;
   const routeObjectiveLabel = optimizeBy === 'duration' ? 'Menor tempo' : 'Menor distância';
-  const routeProfileLabel = routeProfile === 'mercado_livre'
-    ? 'Mercado Livre'
-    : routeProfile === 'shopee'
-      ? 'Shopee'
-      : 'Padrão';
   const routeQuality = (() => {
     if (baselineKm === null || optimizedKm === null || baselineKm <= 0) return null;
     const reductionPercent = ((baselineKm - optimizedKm) / baselineKm) * 100;
@@ -266,7 +297,10 @@ function App() {
     return { label: 'Sem ganho relevante', tone: 'neutral' };
   })();
   const openCurrentNavigation = () => {
-    if (!currentItem?.coords) return;
+    if (!currentItem?.coords) {
+      showToast('Não há parada pendente.', 'info');
+      return;
+    }
     window.open(`https://waze.com/ul?ll=${currentItem.coords.lat},${currentItem.coords.lon}&navigate=yes`, '_blank', 'noopener,noreferrer');
   };
   const saveCurrentRoute = () => {
@@ -292,7 +326,7 @@ function App() {
       <header className="top-glass">
         <div className="brand-elite">
           <div className="brand-icon-box"><Truck size={20} /></div>
-          <span className="brand-text">RotaMestra Pro</span>
+          <span className="brand-text">RotaBoa</span>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           {!isMobile && (
@@ -302,7 +336,7 @@ function App() {
           )}
           {!isMobile && items.length > 0 && (
             <Button variant="o" style={{ borderRadius: '12px' }} onClick={resetWorkspace}>
-              Nova rota
+              Limpar e nova rota
             </Button>
           )}
         </div>
@@ -315,12 +349,11 @@ function App() {
             <>
               {activeTab === 'optimizer' && (
                 <div key="opt">
-
                   {/* Empty State / Hero */}
                   {status === 'idle' && items.length === 0 && (
-                    <div className="animate-slide-up" style={{ padding: '2rem 0', textAlign: 'center' }}>
-                      <h1 style={{ fontSize: '2.05rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '0.8rem' }}>Roteirizador de entregas</h1>
-                      <p style={{ color: 'var(--text-muted)', marginBottom: '1.4rem' }}>Importe sua planilha e calcule a melhor sequência.</p>
+                    <div className="animate-slide-up clean-empty-state">
+                      <h1 style={{ fontSize: '1.55rem', fontWeight: 800, lineHeight: 1.12, marginBottom: '0.55rem' }}>RotaBoa</h1>
+                      <p className="clean-muted" style={{ marginBottom: '1.1rem' }}>Sua entrega no caminho certo.</p>
                       <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
                     </div>
                   )}
@@ -341,35 +374,44 @@ function App() {
                   {status === 'idle' && items.length > 0 && (
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div className="bento-card">
-                        <h3 style={{ fontWeight: 800, marginBottom: '0.85rem' }}>Configuração da rota</h3>
+                        <h3 style={{ fontWeight: 800, marginBottom: '0.7rem' }}>Configurar rota</h3>
+                        <p className="clean-muted" style={{ marginBottom: '0.75rem' }}>
+                          {Math.max(0, items.length - 1)} parada(s) carregada(s).
+                        </p>
+                        <div style={{ display: 'grid', gap: '0.7rem', marginBottom: '0.8rem' }}>
+                          <Button variant="outline" size="sm" fullWidth onClick={() => setShowAdvancedConfig((v) => !v)}>
+                            {showAdvancedConfig ? 'Esconder opções avançadas' : 'Ver opções avançadas'}
+                          </Button>
+                        </div>
                         <div style={{ display: 'grid', gap: '1rem' }}>
                           <div className="config-option">
-                            <span className="config-label">Objetivo da rota</span>
+                            <span className="config-label">Otimizar por</span>
                             <select value={optimizeBy} onChange={e => setOptimizeBy(e.target.value)}>
                               <option value="distance">Menor distância</option>
                               <option value="duration">Menor tempo</option>
                             </select>
                           </div>
-                          <div className="config-option">
-                            <span className="config-label">Ponto de partida</span>
-                            <select value={startPointId ?? ''} onChange={e => setStartPointId(e.target.value)}>
-                              {items.map((it, i) => <option key={it.id} value={it.id}>{i + 1}. {it.address}</option>)}
-                            </select>
-                          </div>
-                          <div className="config-option">
-                            <span className="config-label">Perfil da operação</span>
-                            <select value={routeProfile} onChange={e => setRouteProfile(e.target.value)}>
-                              <option value="neutral">Padrão</option>
-                              <option value="shopee">Shopee</option>
-                              <option value="mercado_livre">Mercado Livre</option>
-                            </select>
-                          </div>
+                          {showAdvancedConfig && (
+                            <>
+                              <div className="config-option">
+                                <span className="config-label">Iniciar em</span>
+                                <select value={startPointId ?? ''} onChange={e => setStartPointId(e.target.value)}>
+                                  {items.map((it, i) => <option key={it.id} value={it.id}>{i + 1}. {it.address}</option>)}
+                                </select>
+                              </div>
+                              <div className="config-option">
+                                <span className="config-label">Perfil</span>
+                                <select value={routeProfile} onChange={e => setRouteProfile(e.target.value)}>
+                                  <option value="neutral">Padrão</option>
+                                  <option value="shopee">Shopee</option>
+                                  <option value="mercado_livre">Mercado Livre</option>
+                                </select>
+                              </div>
+                            </>
+                          )}
                           <Button variant="p" fullWidth size="lg" onClick={startOptimization}>
-                            <Zap size={20} fill="white" /> Calcular rota
+                            <Zap size={20} fill="white" /> Otimizar rota
                           </Button>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                            A rota será calculada por {optimizeBy === 'duration' ? 'tempo total' : 'distância total'}.
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -378,80 +420,124 @@ function App() {
                   {/* Ready State - Dasboard Bento */}
                   {status === 'ready' && routeInfo && (
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div className="bento-card" style={{ padding: '0.85rem 0.9rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.45rem' }}>
-                          <p className="config-label">Visão rápida</p>
-                          <p style={{ fontSize: '0.8rem', fontWeight: 800 }}>{deliveryProgressPercent}% concluído</p>
-                        </div>
-                        <div className="progress-bar-track" style={{ height: '8px' }}>
-                          <div className="progress-bar-fill" style={{ width: `${deliveryProgressPercent}%`, borderRadius: '8px' }} />
-                        </div>
-                        <div className="quick-overview-grid">
-                          <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
-                          <span>Perfil: <b>{routeProfileLabel}</b></span>
-                          <span>Entregues: <b>{deliveryStats.done}</b></span>
-                          <span>Pendentes: <b>{deliveryStats.pending}</b></span>
-                        </div>
-                      </div>
-
                       {!currentItem && (
-                        <div className="bento-card">
+                        <div className="bento-card clean-next-stop-card">
                           <p style={{ fontWeight: 800 }}>Rota concluída</p>
                           <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                             Todas as paradas foram marcadas como entregues.
                           </p>
-                        </div>
-                      )}
-
-                      {currentItem && (
-                        <div className="bento-card">
-                          <p className="config-label">Próxima parada</p>
-                          <p style={{ fontWeight: 800, marginTop: '0.3rem' }}>{currentItem.address}</p>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '0.6rem', marginTop: '0.8rem' }}>
-                            <Button variant="primary" onClick={openCurrentNavigation}>
-                              <Navigation size={16} /> Navegar agora
-                            </Button>
-                            <Button variant="outline" onClick={() => markStatus(currentIdx, 'done')}>
-                              Marcar entregue
-                            </Button>
+                          <div className="quick-overview-grid" style={{ marginTop: '0.8rem' }}>
+                            <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
+                            <span>Concluídas: <b>{deliveryStats.done}</b></span>
+                            <span>Falhas: <b>{deliveryStats.failed}</b></span>
                           </div>
                         </div>
                       )}
 
-                      <RouteDetails
-                        items={items}
-                        stopStatuses={stopStatuses}
-                        onMarkDone={idx => markStatus(idx, 'done')}
-                        onMarkFailed={idx => markStatus(idx, 'failed')}
-                        onCopyAddress={async (address) => {
-                          try {
-                            await navigator.clipboard?.writeText(address || '');
-                            showToast('Endereço copiado.', 'success');
-                          } catch {
-                            showToast('Não foi possível copiar.', 'error');
-                          }
-                        }}
-                      />
+                      {currentItem && (
+                        <div className="bento-card clean-next-stop-card">
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                            <p className="config-label">Próxima parada</p>
+                            <p style={{ fontSize: '0.8rem', fontWeight: 800 }}>{deliveryProgressPercent}%</p>
+                          </div>
+                          <div className="progress-bar-track" style={{ height: '7px', marginTop: '0.4rem' }}>
+                            <div className="progress-bar-fill" style={{ width: `${deliveryProgressPercent}%`, borderRadius: '8px' }} />
+                          </div>
+                          <p style={{ fontWeight: 800, marginTop: '0.3rem' }}>{currentItem.address}</p>
+                          {currentItem.observation && (
+                            <p className="clean-muted" style={{ marginTop: '0.35rem' }}>
+                              Referência: {currentItem.observation}
+                            </p>
+                          )}
+                          <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.8rem' }}>
+                            <Button variant="primary" size="lg" onClick={openCurrentNavigation}>
+                              <Navigation size={16} /> Navegar agora
+                            </Button>
+                            <div className="secondary-actions-row">
+                              <Button variant="success" onClick={() => markStatus(currentIdx, 'done')}>
+                                Entregue
+                              </Button>
+                              <Button variant="danger" onClick={() => markStatus(currentIdx, 'failed')}>
+                                Não entregue
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                      <div className="secondary-actions-row">
-                        <Button variant="o" size="sm" fullWidth onClick={() => setStatus('idle')}>
-                          <RefreshCw size={15} /> Recalcular
-                        </Button>
-                        <Button variant="outline" size="sm" fullWidth onClick={saveCurrentRoute}>
-                          Salvar
-                        </Button>
-                      </div>
+                      {upcomingStops.length > 0 && (
+                        <div className="bento-card" style={{ padding: '0.8rem 0.9rem' }}>
+                          <p className="config-label" style={{ marginBottom: '0.5rem' }}>Próximas paradas</p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                            {upcomingStops.map(({ item, idx }, position) => (
+                              <div key={`upcoming-${item.id}`} style={{
+                                border: '1px solid var(--border)',
+                                borderRadius: '10px',
+                                padding: '0.45rem 0.55rem',
+                                background: 'rgba(var(--bg-rgb), 0.5)'
+                              }}>
+                                <p style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                                  {position === 0 ? `Agora · Parada ${idx + 1}` : `Depois · Parada ${idx + 1}`}
+                                </p>
+                                <p style={{ fontSize: '0.84rem', fontWeight: 700, marginTop: '0.12rem' }}>{item.address}</p>
+                                {item.observation && (
+                                  <p className="clean-muted" style={{ marginTop: '0.12rem' }}>
+                                    Ref.: {item.observation}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Button variant="outline" size="sm" fullWidth onClick={() => setShowMoreTools((v) => !v)}>
+                        {showMoreTools ? 'Ocultar opções' : 'Opções'}
+                      </Button>
+
+                      {showMoreTools && (
+                        <>
+                          <div className="secondary-actions-row">
+                            <Button variant="o" size="sm" fullWidth onClick={() => setStatus('idle')}>
+                              <RefreshCw size={15} /> Refazer rota
+                            </Button>
+                            <Button variant="outline" size="sm" fullWidth onClick={saveCurrentRoute}>
+                              Salvar rota
+                            </Button>
+                          </div>
+                          <Button variant="outline" size="sm" fullWidth onClick={() => setShowStopList((v) => !v)}>
+                            {showStopList ? 'Ocultar paradas' : 'Ver paradas'}
+                          </Button>
+                          {showStopList && (
+                            <RouteDetails
+                              items={items}
+                              stopStatuses={stopStatuses}
+                              onActionFeedback={showToast}
+                              onMarkDone={idx => markStatus(idx, 'done')}
+                              onMarkFailed={idx => markStatus(idx, 'failed')}
+                              onCopyAddress={async (address) => {
+                                try {
+                                  await navigator.clipboard?.writeText(address || '');
+                                  showToast('Endereço copiado.', 'success');
+                                } catch {
+                                  showToast('Não foi possível copiar.', 'error');
+                                }
+                              }}
+                            />
+                          )}
+                          <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
+                            {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
+                          </Button>
+                        </>
+                      )}
                       {isMobile && (
                         <Button variant="primary" fullWidth onClick={() => { setOperationMode(true); setMobileView('map'); }}>
-                          <Navigation size={16} /> Modo operação
+                          <Navigation size={16} /> Modo motorista
                         </Button>
                       )}
-                      <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
-                        {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
-                      </Button>
-                      {showRouteSummary && (
+                      {showMoreTools && showRouteSummary && (
                         <div className="bento-card" style={{ padding: '0.9rem' }}>
-                          <p className="config-label">Resumo da rota</p>
+                          <p className="config-label">Resumo</p>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginTop: '0.5rem' }}>
                             <div>
                               <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>Distância total</p>
@@ -495,6 +581,9 @@ function App() {
                     setStartPointId(l.startPointId ?? l.items?.[0]?.id ?? null);
                     setStopStatuses(buildInitialStopStatuses(l.items || []));
                     setStatus(l.routeInfo ? 'ready' : 'idle');
+                    setShowStopList(false);
+                    setShowMoreTools(false);
+                    setShowAdvancedConfig(false);
                     setOperationMode(false);
                     setMobileView('panel');
                     setActiveTab('optimizer');
@@ -546,7 +635,7 @@ function App() {
           {isMobile && operationMode && status === 'ready' && (
             <div className="operation-mode-overlay">
               <div className="operation-mode-head">
-                <span>Modo operação</span>
+                <span>Modo motorista</span>
                 <button type="button" className="operation-close-btn" onClick={() => setOperationMode(false)}>
                   Sair
                 </button>
@@ -563,7 +652,7 @@ function App() {
                       Entregue
                     </button>
                     <button type="button" className="operation-btn operation-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                      Falhou
+                      Não entregue
                     </button>
                   </div>
                 </>
@@ -602,7 +691,7 @@ function App() {
             disabled={!currentItem && status !== 'idle'}
           >
             {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
-            {status === 'ready' ? 'Ir p/ próxima' : 'Calcular rota'}
+            {status === 'ready' ? 'Ir p/ próxima' : 'Otimizar rota'}
           </button>
 
           <button
