@@ -16,6 +16,37 @@ function ChangeView({ bounds }) {
     return null;
 }
 
+function EnsureMapResize() {
+    const map = useMap();
+    useEffect(() => {
+        const runInvalidate = () => {
+            try {
+                map.invalidateSize();
+            } catch {
+                // noop
+            }
+        };
+
+        const t1 = setTimeout(runInvalidate, 150);
+        const t2 = setTimeout(runInvalidate, 700);
+
+        const onResize = () => runInvalidate();
+        window.addEventListener('resize', onResize);
+        window.addEventListener('orientationchange', onResize);
+        document.addEventListener('visibilitychange', onResize);
+
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            window.removeEventListener('resize', onResize);
+            window.removeEventListener('orientationchange', onResize);
+            document.removeEventListener('visibilitychange', onResize);
+        };
+    }, [map]);
+
+    return null;
+}
+
 const TILE_PROVIDERS = [
     {
         key: 'osm',
@@ -41,6 +72,7 @@ const TILE_PROVIDERS = [
 
 const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }) => {
     const [providerIdx, setProviderIdx] = useState(0);
+    const [hasLoadedTile, setHasLoadedTile] = useState(false);
     const tileErrorCountRef = useRef(0);
 
     const hasValidCoords = (item) =>
@@ -63,6 +95,11 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
         setProviderIdx((idx) => Math.min(idx + 1, TILE_PROVIDERS.length - 1));
     };
 
+    useEffect(() => {
+        setHasLoadedTile(false);
+        tileErrorCountRef.current = 0;
+    }, [providerIdx]);
+
     return (
         <div style={{ height: '100%', width: '100%', position: 'relative', background: '#e5e7eb' }}>
             <MapContainer
@@ -76,8 +113,12 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
                     attribution={provider.attribution}
                     url={provider.url}
                     subdomains={provider.subdomains}
-                    eventHandlers={{ tileerror: handleTileError }}
+                    eventHandlers={{
+                        tileerror: handleTileError,
+                        tileload: () => setHasLoadedTile(true)
+                    }}
                 />
+                <EnsureMapResize />
 
                 {items.map((item, idx) => {
                     if (!hasValidCoords(item)) return null;
@@ -131,6 +172,18 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1 }
             <div style={{ position: 'absolute', right: '10px', bottom: '10px', zIndex: 900, background: 'rgba(255,255,255,0.9)', borderRadius: '8px', padding: '6px 10px', fontSize: '12px', border: '1px solid #d1d5db' }}>
                 Base: {provider.name}
             </div>
+
+            {!hasLoadedTile && (
+                <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 900, background: 'rgba(255,255,255,0.95)', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', border: '1px solid #d1d5db', maxWidth: '220px' }}>
+                    <p style={{ marginBottom: '6px', color: '#334155' }}>Carregando mapa... se não abrir, troque a base.</p>
+                    <button
+                        style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 8px', background: '#fff', cursor: 'pointer' }}
+                        onClick={() => setProviderIdx((idx) => (idx + 1) % TILE_PROVIDERS.length)}
+                    >
+                        Trocar Base
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
