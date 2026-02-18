@@ -47,14 +47,14 @@ const TopBar = ({
                             <button
                                 className={`mobile-view-btn ${mobileView === 'panel' ? 'mobile-view-btn-active' : ''}`}
                                 onClick={() => setMobileView('panel')}
-                                aria-label="Exibir painel"
+                                aria-label="Abrir painel"
                             >
                                 Painel
                             </button>
                             <button
                                 className={`mobile-view-btn ${mobileView === 'map' ? 'mobile-view-btn-active' : ''}`}
                                 onClick={() => setMobileView('map')}
-                                aria-label="Exibir mapa"
+                                aria-label="Abrir mapa"
                             >
                                 Mapa
                             </button>
@@ -79,13 +79,13 @@ const TopBar = ({
 
                     {status === 'ready' && (
                         <button className={`btn ${isFieldMode ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsFieldMode((v) => !v)} style={{ borderRadius: '12px' }} title="Modo motorista em campo">
-                            <LocateFixed size={17} /> <span className="hide-mobile">Modo Campo</span>
+                            <LocateFixed size={17} /> <span className="hide-mobile">Modo motorista</span>
                         </button>
                     )}
 
                     {!isMobileViewport && itemsLength > 0 && (
                         <Button variant="danger" onClick={onReset} style={{ borderRadius: '12px' }}>
-                            <Trash2 size={17} /> <span className="hide-mobile">Limpar</span>
+                            <Trash2 size={17} /> <span className="hide-mobile">Nova rota</span>
                         </Button>
                     )}
                 </div>

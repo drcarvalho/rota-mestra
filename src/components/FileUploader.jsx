@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { FileText, CloudUpload, Upload } from 'lucide-react';
+import { CloudUpload, Upload } from 'lucide-react';
 import Card from './ui/Card';
 
 const FileUploader = ({ onUpload, onValidationError }) => {
@@ -54,6 +54,7 @@ const FileUploader = ({ onUpload, onValidationError }) => {
                 role="button"
                 tabIndex={0}
                 aria-label="Selecionar arquivo de entregas"
+                title="Selecionar arquivo de entregas"
                 className={`upload-zone ${isDragActive ? 'upload-zone-active' : ''}`}
             >
                 {isDragActive && (
@@ -67,10 +68,10 @@ const FileUploader = ({ onUpload, onValidationError }) => {
                 </div>
 
                 <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                    Importar arquivo de entregas
+                    Importar planilha de entregas
                 </h3>
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', maxWidth: '280px', margin: '0 auto', lineHeight: 1.5 }}>
-                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b> ou clique para selecionar
+                    Arraste um arquivo <b>CSV</b> ou <b>Excel</b>, ou clique para selecionar.
                 </p>
 
                 <div className="upload-format-badges">

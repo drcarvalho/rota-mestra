@@ -1,16 +1,57 @@
-# React + Vite
+# RotaBoa (RotaMestra)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicação web para importar planilhas de entregas e gerar uma rota otimizada com visualização em mapa, fluxo de operação para motorista e persistência local.
 
-Currently, two official plugins are available:
+## Funcionalidades
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Importação de planilhas `.csv`, `.xlsx` e `.xls`.
+- Geocodificação de endereços com fallback e normalização.
+- Otimização de rota com estratégia híbrida:
+  - solução exata (Held-Karp) para conjuntos pequenos;
+  - heurística (nearest-neighbor + 2-opt) para conjuntos maiores;
+  - uso de OSRM para matriz de custos, rota e geometria.
+- Modo motorista com ações rápidas (entregue/falhou/navegar).
+- Integração direta com Waze.
+- Fila de ações offline com sincronização ao voltar conexão.
+- Histórico de rotas salvo em `localStorage`.
 
-## React Compiler
+## Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React 19 + Vite
+- Leaflet + React-Leaflet
+- Lucide React
+- PapaParse + SheetJS
+- Framer Motion
 
-## Expanding the ESLint configuration
+## Scripts
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm run dev       # ambiente de desenvolvimento
+npm run build     # build de produção
+npm run preview   # preview local da build
+npm run lint      # lint do projeto
+npm run test:logic
+```
+
+## Como rodar
+
+1. Instale dependências:
+   ```bash
+   npm install
+   ```
+2. Inicie o projeto:
+   ```bash
+   npm run dev
+   ```
+3. Abra a URL exibida pelo Vite (normalmente `http://localhost:5173`).
+
+## Estrutura resumida
+
+```text
+src/
+├── components/      # interface e módulos visuais
+├── hooks/           # persistência e utilitários de estado
+├── utils/           # parser, geocoding e otimização
+├── App.jsx          # fluxo principal da aplicação
+└── App.css          # estilos globais e tema
+```

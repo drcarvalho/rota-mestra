@@ -21,7 +21,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     const openGoogleMaps = () => {
         if (items.length < 2) {
-            onActionFeedback?.('Adicione ao menos 2 paradas para abrir no Google Maps.', 'info');
+            onActionFeedback?.('Adicione pelo menos 2 paradas para abrir no Google Maps.', 'info');
             return;
         }
         const origin = items[0].address;
@@ -34,7 +34,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
     const openWaze = () => {
         const next = items.find((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
         if (!next?.coords) {
-            onActionFeedback?.('Nenhuma parada pendente com coordenadas para abrir no Waze.', 'info');
+            onActionFeedback?.('Não há parada pendente com coordenadas para abrir no Waze.', 'info');
             return;
         }
         const stop = `${next.coords.lat},${next.coords.lon}`;
@@ -65,14 +65,14 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
         link.setAttribute('href', url);
         link.setAttribute('download', 'rota_profissional_mestra.csv');
         link.click();
-        onActionFeedback?.('CSV exportado com sucesso.', 'success');
+        onActionFeedback?.('Arquivo CSV exportado com sucesso.', 'success');
     };
 
     const statusMeta = (item, idx) => {
         if (idx === 0) return { label: 'Partida', color: '#10b981', background: 'rgba(16, 185, 129, 0.06)' };
         const value = stopStatuses[String(item.id)] || 'pending';
         if (value === 'done') return { label: 'Entregue', color: '#10b981', background: 'rgba(16, 185, 129, 0.06)' };
-        if (value === 'failed') return { label: 'Não entregue', color: '#ef4444', background: 'rgba(239, 68, 68, 0.06)' };
+        if (value === 'failed') return { label: 'Falha', color: '#ef4444', background: 'rgba(239, 68, 68, 0.06)' };
         return { label: 'Pendente', color: '#3b82f6', background: 'var(--bg)' };
     };
 
@@ -88,7 +88,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     const handlePrint = () => {
         if (items.length === 0) {
-            onActionFeedback?.('Sem dados para imprimir.', 'info');
+            onActionFeedback?.('Não há dados para imprimir.', 'info');
             return;
         }
         window.print();
@@ -100,11 +100,11 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 <SectionHeader
                     title={(
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-                            <MapPin size={17} color="var(--primary)" /> Ordem de paradas
+                            <MapPin size={17} color="var(--primary)" /> Lista de paradas
                         </span>
                     )}
                     actions={(
-                        <Button variant="outline" className="btn-icon" onClick={exportCSV} title="Exportar CSV">
+                        <Button variant="outline" className="btn-icon" onClick={exportCSV} title="Baixar CSV" aria-label="Baixar CSV">
                             <Download size={17} />
                         </Button>
                     )}
@@ -115,7 +115,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                         <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                         <input
                             type="text"
-                            placeholder="Buscar endereço ou parada..."
+                            placeholder="Buscar por endereço ou número da parada..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{
@@ -135,7 +135,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', maxHeight: '460px', overflowY: 'auto' }} className="custom-scroll">
                     {filteredItems.map(({ item, idx }) => {
                         const meta = statusMeta(item, idx);
-                        const badgeTone = meta.label === 'Entregue' ? 'success' : meta.label === 'Não entregue' ? 'error' : meta.label === 'Pendente' ? 'warning' : 'info';
+                        const badgeTone = meta.label === 'Entregue' ? 'success' : meta.label === 'Falha' ? 'error' : meta.label === 'Pendente' ? 'warning' : 'info';
                         return (
                             <div key={item.id} className="route-stop-item" style={{ background: meta.background, borderColor: idx === 0 ? 'var(--success)' : undefined }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
@@ -160,10 +160,10 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                                             <CheckCircle2 size={13} /> Entregue
                                         </Button>
                                         <Button variant="danger" size="sm" className="route-stop-mini-btn" onClick={() => onMarkFailed?.(idx)}>
-                                            <XCircle size={13} /> Não entregue
+                                            <XCircle size={13} /> Falha
                                         </Button>
                                         <Button variant="outline" size="sm" className="route-stop-mini-btn" onClick={() => onCopyAddress?.(item.address)}>
-                                            <Copy size={13} /> Copiar
+                                            <Copy size={13} /> Copiar endereço
                                         </Button>
                                     </div>
                                 )}
@@ -174,7 +174,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
             </Card>
 
             <Card style={{ padding: '0.9rem' }}>
-                <SectionHeader title="Navegação externa" />
+                <SectionHeader title="Abrir em apps de navegação" />
                 <div className="route-external-actions">
                     <Button variant="primary" onClick={openWaze} disabled={!hasPendingStop}>
                         <Navigation size={16} /> Abrir no Waze
@@ -183,7 +183,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                         <ExternalLink size={16} /> Abrir no Google Maps
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }} disabled={items.length === 0}>
-                        Imprimir lista
+                        Imprimir paradas
                     </Button>
                 </div>
             </Card>

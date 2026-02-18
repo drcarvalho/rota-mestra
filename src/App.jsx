@@ -104,7 +104,7 @@ function App() {
   useEffect(() => {
     if (!isOnline || pendingActions.length === 0) return;
     setPendingActions([]);
-    showToast('Dados offline enviados.', 'success');
+    showToast('Ações offline sincronizadas.', 'success');
   }, [isOnline, pendingActions.length]);
 
   useWorkspacePersistence({
@@ -130,7 +130,7 @@ function App() {
   const showToast = (message, type = 'info') => setToast({ message, type });
 
   const resetWorkspace = () => {
-    if (!window.confirm('Deseja limpar a sessão atual?')) return;
+    if (!window.confirm('Deseja limpar a rota atual e começar uma nova?')) return;
     setItems([]);
     setStatus('idle');
     setProgress(0);
@@ -153,7 +153,7 @@ function App() {
     } catch {
       // noop
     }
-    showToast('Rota atual foi limpa.', 'info');
+    showToast('Rota limpa com sucesso.', 'info');
   };
 
   const toggleTheme = () => {
@@ -172,7 +172,7 @@ function App() {
       setProgress(0);
       const data = await parseFile(file);
       if (!Array.isArray(data) || data.length === 0) {
-        throw new Error('Arquivo sem dados válidos.');
+        throw new Error('O arquivo não possui dados válidos.');
       }
       setItems(data);
       setStartPointId(data[0]?.id ?? null);
@@ -185,7 +185,7 @@ function App() {
       setActiveTab('optimizer');
       setMobileView('panel');
       setStatus('idle');
-      showToast('Planilha carregada com sucesso.', 'success');
+      showToast('Arquivo carregado com sucesso.', 'success');
     } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
   };
 
@@ -203,7 +203,7 @@ function App() {
       });
       const validItems = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
       if (!validItems.length) {
-        throw new Error('Não foi possível localizar os endereços da planilha.');
+        throw new Error('Não foi possível localizar os endereços informados na planilha.');
       }
 
       setStatus('optimizing');
@@ -233,7 +233,7 @@ function App() {
       const optimizedDistanceKm = Number.isFinite(res?.distance) ? res.distance / 1000 : null;
       const optimizedDurationMin = Number.isFinite(res?.duration) ? Math.round(res.duration / 60) : null;
       if (optimizedDistanceKm !== null && optimizedDurationMin !== null) {
-        showToast(`Rota pronta: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
+        showToast(`Rota otimizada: ${optimizedDistanceKm.toFixed(1)} km · ${optimizedDurationMin} min`, 'success');
       }
       confetti({ particleCount: 200, spread: 70, origin: { y: 0.7 } });
     } catch (err) {
@@ -253,11 +253,11 @@ function App() {
         ...current,
         { stopId, status: s, timestamp: Date.now() }
       ]));
-      showToast('Sem internet. Ação salva e será sincronizada quando voltar conexão.', 'info');
+      showToast('Sem internet. Ação salva para sincronizar quando a conexão voltar.', 'info');
       return;
     }
     showToast(
-      s === 'done' ? 'Entrega marcada como concluída.' : 'Parada marcada como não entregue.',
+      s === 'done' ? 'Entrega marcada como concluída.' : 'Entrega marcada como falha.',
       s === 'done' ? 'success' : 'error'
     );
   };
@@ -298,7 +298,7 @@ function App() {
   })();
   const openCurrentNavigation = () => {
     if (!currentItem?.coords) {
-      showToast('Não há parada pendente.', 'info');
+      showToast('Não há próxima parada pendente.', 'info');
       return;
     }
     window.open(`https://waze.com/ul?ll=${currentItem.coords.lat},${currentItem.coords.lon}&navigate=yes`, '_blank', 'noopener,noreferrer');
@@ -318,13 +318,13 @@ function App() {
       startPointId
     };
     persistHistory([entry, ...routeHistory].slice(0, 30));
-    showToast('Rota salva no histórico.', 'success');
+    showToast('Rota salva no histórico com sucesso.', 'success');
   };
   const processingLabel = status === 'uploading'
-    ? 'Lendo planilha'
+    ? 'Importando planilha'
     : status === 'geocoding'
-      ? 'Localizando endereços'
-      : 'Calculando melhor rota';
+      ? 'Geocodificando endereços'
+      : 'Otimizando rota';
   const detectedCity = (() => {
     const cityCounter = new Map();
     items.forEach((item) => {
@@ -353,16 +353,23 @@ function App() {
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           {!isMobile && (
-            <Button variant="o" style={{ width: '42px', padding: 0, borderRadius: '12px' }} onClick={toggleTheme}>
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            <Button
+              variant="o"
+              style={{ width: '42px', padding: 0, borderRadius: '12px' }}
+              onClick={toggleTheme}
+              aria-label={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
+              title={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
+            >
+              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
             </Button>
           )}
           {!isMobile && items.length > 0 && (
             <Button variant="o" style={{ borderRadius: '12px' }} onClick={resetWorkspace}>
-              Limpar e nova rota
+              Nova rota
             </Button>
           )}
         </div>
+
       </header>
 
       <main className="main-viewport">
@@ -374,18 +381,44 @@ function App() {
                 <div key="opt">
                   {/* Empty State / Hero */}
                   {status === 'idle' && items.length === 0 && (
-                    <div className="animate-slide-up clean-empty-state">
-                      <h1 style={{ fontSize: '1.55rem', fontWeight: 800, lineHeight: 1.12, marginBottom: '0.55rem' }}>RotaBoa</h1>
-                      <p className="clean-muted" style={{ marginBottom: '0.8rem' }}>Organize suas entregas em segundos.</p>
-                      <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
-                      <div className="quick-start-steps">
-                        <span>1. Importe a planilha</span>
-                        <span>2. Toque em otimizar</span>
-                        <span>3. Inicie pelo próximo endereço</span>
+                    <div className="animate-slide-up hero-container">
+                      <div className="hero-badge">Versão 4.0</div>
+                      <h1 className="hero-title">
+                        Entregas mais rápidas com <span className="text-gradient">rota inteligente</span>
+                      </h1>
+                      <p className="hero-subtitle">
+                        Importe sua planilha e gere uma sequência otimizada de paradas em poucos segundos.
+                      </p>
+
+                      <div className="hero-upload-section">
+                        <FileUploader onUpload={handleUpload} onValidationError={m => showToast(m, 'error')} />
                       </div>
-                      <p className="clean-muted" style={{ marginTop: '0.85rem' }}>Compatível com Shopee e Mercado Livre.</p>
+
+                      <div className="hero-stats-row">
+                        <div className="hero-stat">
+                          <span className="hero-stat-value">Até 20%</span>
+                          <span className="hero-stat-label">Economia</span>
+                        </div>
+                        <div className="hero-divider" />
+                        <div className="hero-stat">
+                          <span className="hero-stat-value">Held-Karp</span>
+                          <span className="hero-stat-label">Logística</span>
+                        </div>
+                        <div className="hero-divider" />
+                        <div className="hero-stat">
+                          <span className="hero-stat-value">Tempo real</span>
+                          <span className="hero-stat-label">Otimização</span>
+                        </div>
+                      </div>
+
+                      <div className="hero-platforms">
+                        <span className="platform-tag">Shopee</span>
+                        <span className="platform-tag">Mercado Livre</span>
+                        <span className="platform-tag">Amazon</span>
+                      </div>
                     </div>
                   )}
+
 
                   {/* Processing Status */}
                   {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
@@ -404,14 +437,18 @@ function App() {
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       <div className="bento-card">
                         <h3 style={{ fontWeight: 800, marginBottom: '0.7rem' }}>Configurar rota</h3>
-                        <div className="import-ready-pill">Planilha carregada com sucesso</div>
+                        <div className="import-ready-pill">Arquivo pronto para otimização</div>
                         <p className="clean-muted" style={{ marginBottom: '0.35rem' }}>{Math.max(0, items.length - 1)} parada(s).</p>
                         {detectedCity && <p className="clean-muted" style={{ marginBottom: '0.75rem' }}>Região principal: {detectedCity}</p>}
-                        <div style={{ display: 'grid', gap: '0.7rem', marginBottom: '0.8rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem', marginBottom: '0.8rem' }}>
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowAdvancedConfig((v) => !v)}>
-                            {showAdvancedConfig ? 'Esconder opções avançadas' : 'Ver opções avançadas'}
+                            {showAdvancedConfig ? 'Ocultar opções' : 'Mais opções'}
+                          </Button>
+                          <Button variant="outline" size="sm" fullWidth onClick={resetWorkspace}>
+                            Remover arquivo
                           </Button>
                         </div>
+
                         <div style={{ display: 'grid', gap: '1rem' }}>
                           <div className="config-option">
                             <span className="config-label">Otimizar por</span>
@@ -439,7 +476,7 @@ function App() {
                             </>
                           )}
                           <Button variant="p" fullWidth size="lg" className="sticky-optimize-btn" onClick={startOptimization}>
-                            <Zap size={20} fill="white" /> Otimizar rota
+                            <Zap size={20} fill="white" /> Gerar rota otimizada
                           </Button>
                         </div>
                       </div>
@@ -451,9 +488,9 @@ function App() {
                     <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {!currentItem && (
                         <div className="bento-card clean-next-stop-card">
-                          <p style={{ fontWeight: 800 }}>Rota concluída</p>
+                          <p style={{ fontWeight: 800 }}>Rota finalizada</p>
                           <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                            Todas as paradas foram marcadas como entregues.
+                            Todas as entregas foram concluídas.
                           </p>
                           <div className="quick-overview-grid" style={{ marginTop: '0.8rem' }}>
                             <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
@@ -480,14 +517,14 @@ function App() {
                           )}
                           <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.8rem' }}>
                             <Button variant="primary" size="lg" onClick={openCurrentNavigation}>
-                              <Navigation size={16} /> Navegar agora
+                              <Navigation size={16} /> Abrir no Waze
                             </Button>
                             <div className="secondary-actions-row">
                               <Button variant="success" onClick={() => markStatus(currentIdx, 'done')}>
-                                Entregue
+                                Concluir entrega
                               </Button>
                               <Button variant="danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                                Não entregue
+                                Marcar falha
                               </Button>
                             </div>
                           </div>
@@ -496,7 +533,7 @@ function App() {
 
                       {upcomingStops.length > 0 && (
                         <div className="bento-card" style={{ padding: '0.8rem 0.9rem' }}>
-                          <p className="config-label" style={{ marginBottom: '0.5rem' }}>Próximas paradas</p>
+                          <p className="config-label" style={{ marginBottom: '0.5rem' }}>Próximas entregas</p>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                             {upcomingStops.map(({ item, idx }, position) => (
                               <div key={`upcoming-${item.id}`} style={{
@@ -521,21 +558,21 @@ function App() {
                       )}
 
                       <Button variant="outline" size="sm" fullWidth onClick={() => setShowMoreTools((v) => !v)}>
-                        {showMoreTools ? 'Ocultar opções' : 'Opções'}
+                        {showMoreTools ? 'Ocultar ferramentas' : 'Mostrar ferramentas'}
                       </Button>
 
                       {showMoreTools && (
                         <>
                           <div className="secondary-actions-row">
                             <Button variant="o" size="sm" fullWidth onClick={() => setStatus('idle')}>
-                              <RefreshCw size={15} /> Refazer rota
+                              <RefreshCw size={15} /> Recalcular rota
                             </Button>
                             <Button variant="outline" size="sm" fullWidth onClick={saveCurrentRoute}>
-                              Salvar rota
+                              Salvar no histórico
                             </Button>
                           </div>
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowStopList((v) => !v)}>
-                            {showStopList ? 'Ocultar paradas' : 'Ver paradas'}
+                            {showStopList ? 'Ocultar lista de paradas' : 'Mostrar lista de paradas'}
                           </Button>
                           {showStopList && (
                             <RouteDetails
@@ -555,7 +592,7 @@ function App() {
                             />
                           )}
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowRouteSummary((v) => !v)}>
-                            {showRouteSummary ? 'Ocultar resumo' : 'Ver resumo da rota'}
+                            {showRouteSummary ? 'Ocultar resumo da rota' : 'Mostrar resumo da rota'}
                           </Button>
                         </>
                       )}
@@ -647,15 +684,15 @@ function App() {
             <div className="hud-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <div className="status-glow" style={{ background: 'var(--primary)' }} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PRÓXIMA ENTREGA</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PRÓXIMA PARADA</span>
               </div>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1.25rem' }}>{currentItem.address}</h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '0.75rem' }}>
                 <button className="btn-elite btn-p" onClick={openCurrentNavigation}>
-                  <Navigation size={18} fill="white" /> NAVEGAR AGORA
+                  <Navigation size={18} fill="white" /> NAVEGAR
                 </button>
                 <button className="btn-elite btn-o" onClick={() => markStatus(currentIdx, 'done')}>
-                  CONCLUIR
+                  ENTREGUE
                 </button>
               </div>
             </div>
@@ -666,33 +703,35 @@ function App() {
               <div className="operation-mode-head">
                 <span>Modo motorista</span>
                 <button type="button" className="operation-close-btn" onClick={() => setOperationMode(false)}>
-                  Sair
+                  Fechar
                 </button>
               </div>
               {currentItem ? (
                 <>
-                  <p className="operation-label">Próxima parada</p>
+                  <p className="operation-label">PRÓXIMA PARADA</p>
                   <h2 className="operation-address">{currentItem.address}</h2>
-                  <button type="button" className="operation-btn operation-btn-primary" onClick={openCurrentNavigation}>
-                    <Navigation size={18} /> Navegar
-                  </button>
-                  <div className="operation-actions-grid">
+
+                  <div className="primary-actions-bottom-row">
                     <button type="button" className="operation-btn operation-btn-success" onClick={() => markStatus(currentIdx, 'done')}>
                       Entregue
                     </button>
+                    <button type="button" className="operation-btn operation-btn-primary" onClick={openCurrentNavigation}>
+                      <Navigation size={20} /> Navegar
+                    </button>
                     <button type="button" className="operation-btn operation-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                      Não entregue
+                      Marcar falha
                     </button>
                   </div>
                 </>
               ) : (
                 <>
-                  <p className="operation-label">Rota finalizada</p>
-                  <h2 className="operation-address">Todas as paradas foram concluídas.</h2>
+                  <p className="operation-label">CONCLUÍDO</p>
+                  <h2 className="operation-address">Todas as paradas foram finalizadas.</h2>
                 </>
               )}
             </div>
           )}
+
         </div>
       </main>
 
@@ -720,7 +759,7 @@ function App() {
             disabled={!currentItem && status !== 'idle'}
           >
             {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
-            {status === 'ready' ? 'Ir p/ próxima' : 'Otimizar rota'}
+            {status === 'ready' ? 'Ir para próxima' : 'Gerar rota'}
           </button>
 
           <button
@@ -741,7 +780,7 @@ function App() {
       )}
       {isMobile && pendingActions.length > 0 && (
         <div className="app-toast app-toast-info" style={{ bottom: '146px' }}>
-          {pendingActions.length} ação(ões) aguardando internet
+          {pendingActions.length} ação(ões) aguardando conexão
         </div>
       )}
     </div>

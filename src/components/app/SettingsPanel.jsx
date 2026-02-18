@@ -24,26 +24,26 @@ const SettingsPanel = ({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    Ajustes rápidos do aplicativo.
+                    Ações rápidas para personalizar e organizar sua operação.
                 </p>
 
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
                     <Button variant="outline" onClick={onBackToOptimizer} fullWidth>
-                        <LayoutGrid size={15} /> Voltar para painel
+                        <LayoutGrid size={15} /> Ir para o painel
                     </Button>
                     <Button variant="outline" onClick={onOpenHistory} fullWidth>
-                        <History size={15} /> Abrir histórico
+                        <History size={15} /> Ver histórico
                     </Button>
                     <Button variant="outline" onClick={onToggleTheme} fullWidth>
                         {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
-                        {isDarkMode ? 'Tema claro' : 'Tema escuro'}
+                        {isDarkMode ? 'Usar tema claro' : 'Usar tema escuro'}
                     </Button>
                     <Button variant="outline" onClick={onClearWorkspace} fullWidth>
-                        <Trash2 size={15} /> Limpar sessão salva
+                        <Trash2 size={15} /> Limpar rota atual
                     </Button>
                     <Button variant="outline" onClick={onClearHistory} fullWidth>
-                        <History size={15} /> Limpar histórico de rotas
+                        <History size={15} /> Apagar histórico de rotas
                     </Button>
                 </div>
             </div>

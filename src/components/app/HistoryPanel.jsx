@@ -15,14 +15,14 @@ const HistoryPanel = ({ routeHistory, onClear, onLoad }) => {
                 )}
                 actions={(
                     <Button variant="outline" size="sm" onClick={onClear} disabled={routeHistory.length === 0}>
-                        <Trash2 size={14} /> Limpar
+                        <Trash2 size={14} /> Apagar histórico
                     </Button>
                 )}
             />
             {routeHistory.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
                     <Clock size={32} color="var(--border)" style={{ marginBottom: '0.5rem' }} />
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sem rotas salvas.</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhuma rota salva ainda.</p>
                 </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '420px', overflowY: 'auto' }}>
