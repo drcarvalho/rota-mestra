@@ -2,14 +2,11 @@ import React from 'react';
 import {
     Navigation,
     MapPin,
-    Clock,
     Download,
     ExternalLink,
     CheckCircle2,
     XCircle,
     Copy,
-    Fuel,
-    Route as RouteIcon,
     Search
 } from 'lucide-react';
 import Card from './ui/Card';
@@ -17,19 +14,10 @@ import Button from './ui/Button';
 import SectionHeader from './ui/SectionHeader';
 import StatusBadge from './ui/StatusBadge';
 
-const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed, onCopyAddress }) => {
-    const fuelPrice = 5.80;
-    const autonomy = 12;
+const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCopyAddress }) => {
     const [searchTerm, setSearchTerm] = React.useState('');
 
     if (!items || items.length === 0) return null;
-
-    const totalKmNum = info?.distance ? (info.distance / 1000) : 0;
-    const totalKm = totalKmNum.toFixed(1);
-    const totalMinutes = info?.duration ? Math.round(info.duration / 60) : 0;
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    const estimatedFuelCost = (totalKmNum / autonomy) * fuelPrice;
 
     const openGoogleMaps = () => {
         if (items.length < 2) return;
@@ -37,7 +25,7 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
         const waypoints = items.slice(1, -1).map((i) => i.address).join('|');
         const destination = items[items.length - 1].address;
         const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}&travelmode=driving`;
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     const openWaze = () => {
@@ -45,7 +33,7 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
         if (!next?.coords) return;
         const stop = `${next.coords.lat},${next.coords.lon}`;
         const url = `https://waze.com/ul?ll=${stop}&navigate=yes`;
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     const exportCSV = () => {
@@ -97,22 +85,6 @@ const RouteDetails = ({ items, info, stopStatuses = {}, onMarkDone, onMarkFailed
                 <Button variant="outline" size="sm" onClick={handlePrint} style={{ padding: '0.4rem 0.8rem', fontSize: '0.72rem' }}>
                     Imprimir Manifesto
                 </Button>
-            </div>
-
-            {/* Stat Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div className="stat-card stat-card-primary">
-                    <div className="stat-label"><RouteIcon size={10} style={{ marginRight: 4, verticalAlign: 'middle' }} />DISTÂNCIA TOTAL</div>
-                    <div className="stat-value">{totalKm} km</div>
-                    <div className="stat-sub">
-                        <Clock size={11} /> {hours}h {mins}m direção
-                    </div>
-                </div>
-                <div className="stat-card stat-card-success">
-                    <div className="stat-label"><Fuel size={10} style={{ marginRight: 4, verticalAlign: 'middle' }} />COMBUSTÍVEL</div>
-                    <div className="stat-value">R$ {estimatedFuelCost.toFixed(2)}</div>
-                    <div className="stat-sub">Base: R$ {fuelPrice.toFixed(2)}/L</div>
-                </div>
             </div>
 
             {/* Navigation Buttons */}

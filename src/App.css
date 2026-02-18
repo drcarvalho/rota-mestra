@@ -248,7 +248,7 @@ header {
 }
 
 .btn-sm {
-  min-height: 36px;
+  min-height: 40px;
   padding: 0.45rem 0.75rem;
   font-size: 0.8rem;
 }
@@ -264,9 +264,9 @@ header {
 }
 
 .btn-icon {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   padding: 0;
   border-radius: 10px;
 }
@@ -612,9 +612,9 @@ header {
 
   .topbar-tabs .btn-icon,
   .topbar-actions > .btn-icon {
-    width: 34px;
-    height: 34px;
-    min-height: 34px;
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
     border-radius: 10px;
   }
 
@@ -648,6 +648,10 @@ header {
   .btn {
     min-height: 46px;
     font-size: 0.95rem;
+  }
+
+  .btn-sm {
+    min-height: 44px;
   }
 }
 
@@ -703,6 +707,7 @@ header {
   border-right: 1px solid var(--border);
   min-height: 0;
   overflow: hidden;
+  overflow-x: hidden;
   background: rgba(var(--card-bg-rgb), 0.35);
 }
 
@@ -718,6 +723,7 @@ header {
 .bento-scroll {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0.9rem;
   display: flex;
   flex-direction: column;
@@ -767,12 +773,19 @@ header {
 }
 
 .config-option select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--card-bg);
   color: var(--text-main);
   font-size: 0.88rem;
   padding: 0.6rem 0.75rem;
+}
+
+.bento-card .btn-full {
+  max-width: 100%;
 }
 
 .hud-card {

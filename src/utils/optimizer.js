@@ -236,34 +236,44 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
 
     const startIdx = options.startIndex >= 0 && options.startIndex < items.length ? options.startIndex : 0;
     const optimizeBy = options.optimizeBy === 'duration' ? 'duration' : 'distance';
+    const baselineOrder = buildBaselineOrder(items.length, startIdx);
+    const baselineRoute = baselineOrder.map((idx) => items[idx]);
+    const baselineMetrics = await getOSRMRoute(baselineRoute, options.roundTrip);
+    const attachBaseline = (result) => ({
+        ...result,
+        optimizeBy,
+        baseline: {
+            distance: baselineMetrics.distance,
+            duration: baselineMetrics.duration
+        }
+    });
 
     // Exact best route on real road costs for smaller inputs.
     // With <=11 points, this is still practical and guarantees optimality.
     if (items.length <= 11) {
         const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip, optimizeBy);
         if (exactRoad) {
-            return { ...exactRoad, optimizeBy };
+            return attachBaseline(exactRoad);
         }
     }
 
     // Better road heuristic for larger inputs using OSRM matrix + 2-opt.
     const roadHeuristic = await getRoadHeuristicOptimized(items, startIdx, options.roundTrip, optimizeBy);
     if (roadHeuristic) {
-        return { ...roadHeuristic, optimizeBy };
+        return attachBaseline(roadHeuristic);
     }
 
     // Fallback road optimizer for larger inputs.
     const tripOptimized = await getOSRMTripOptimized(items, startIdx, options.roundTrip);
     if (tripOptimized) {
-        return {
+        return attachBaseline({
             ...tripOptimized,
-            optimizeBy,
             meta: {
                 solver: 'osrm-trip',
                 exact: false,
                 costBasis: optimizeBy
             }
-        };
+        });
     }
 
     // Fallback: local optimizer + OSRM route geometry.
@@ -271,18 +281,17 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
     const route = indexRoute.map((idx) => items[idx]);
     const pathData = await getOSRMRoute(route, options.roundTrip);
 
-    return {
+    return attachBaseline({
         orderedItems: route,
         geometry: pathData.geometry,
         distance: pathData.distance,
         duration: pathData.duration,
-        optimizeBy,
         meta: {
             solver: 'local-haversine',
             exact: false,
             costBasis: optimizeBy
         }
-    };
+    });
 };
 
 const getExactRoadOptimized = async (items, startIndex, roundTrip = false, optimizeBy = 'distance') => {

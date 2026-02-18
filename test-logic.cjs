@@ -15,6 +15,39 @@ async function testOptimizer() {
         // We Mock the fetch for OSRM
         global.fetch = async (url) => {
             console.log(`🔗 Mocking API: ${url}`);
+            if (url.includes('/route/')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        code: 'Ok',
+                        routes: [{
+                            geometry: { type: 'LineString', coordinates: [[-49.07, -22.32], [-49.06, -22.31], [-49.08, -22.33]] },
+                            distance: 5000,
+                            duration: 600
+                        }]
+                    })
+                };
+            }
+
+            if (url.includes('/table/')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        code: 'Ok',
+                        distances: [
+                            [0, 3500, 1800],
+                            [3500, 0, 2200],
+                            [1800, 2200, 0]
+                        ],
+                        durations: [
+                            [0, 460, 240],
+                            [460, 0, 290],
+                            [240, 290, 0]
+                        ]
+                    })
+                };
+            }
+
             return {
                 ok: true,
                 json: async () => ({
