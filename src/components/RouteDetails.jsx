@@ -21,24 +21,27 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
 
     const openGoogleMaps = () => {
         if (items.length < 2) {
-            onActionFeedback?.('Adicione pelo menos 2 paradas para abrir no Google Maps.', 'info');
+            onActionFeedback?.('Adicione pelo menos duas paradas para abrir no Google Maps.', 'info');
             return;
         }
         const origin = items[0].address;
         const waypoints = items.slice(1, -1).map((i) => i.address).join('|');
         const destination = items[items.length - 1].address;
-        const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=${encodeURIComponent(waypoints)}&travelmode=driving`;
+        const waypointsParam = waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '';
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsParam}&travelmode=driving`;
         window.open(url, '_blank', 'noopener,noreferrer');
     };
 
-    const openWaze = () => {
+    const openNextStopGoogleMaps = () => {
         const next = items.find((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
-        if (!next?.coords) {
-            onActionFeedback?.('Não há parada pendente com coordenadas para abrir no Waze.', 'info');
+        if (!next) {
+            onActionFeedback?.('Nenhuma parada pendente para navegação.', 'info');
             return;
         }
-        const stop = `${next.coords.lat},${next.coords.lon}`;
-        const url = `https://waze.com/ul?ll=${stop}&navigate=yes`;
+        const destination = next.coords
+            ? `${next.coords.lat},${next.coords.lon}`
+            : next.address;
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
         window.open(url, '_blank', 'noopener,noreferrer');
     };
 
@@ -95,7 +98,7 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', animation: 'fadeInScale 0.5s ease' }}>
+        <div className="route-details-wrap">
             <Card style={{ padding: '1rem' }}>
                 <SectionHeader
                     title={(
@@ -111,28 +114,19 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
                 />
 
                 {showSearch && (
-                    <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
-                        <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <div className="route-search-wrap">
+                        <Search size={14} className="route-search-icon" />
                         <input
                             type="text"
                             placeholder="Buscar por endereço ou número da parada..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '0.6rem 0.75rem 0.6rem 2rem',
-                                borderRadius: '10px',
-                                border: '1px solid var(--border)',
-                                fontSize: '0.8rem',
-                                background: 'var(--bg)',
-                                color: 'var(--text-main)',
-                                outline: 'none'
-                            }}
+                            className="route-search-input"
                         />
                     </div>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', maxHeight: '460px', overflowY: 'auto' }} className="custom-scroll">
+                <div className="route-stops-scroll custom-scroll">
                     {filteredItems.map(({ item, idx }) => {
                         const meta = statusMeta(item, idx);
                         const badgeTone = meta.label === 'Entregue' ? 'success' : meta.label === 'Falha' ? 'error' : meta.label === 'Pendente' ? 'warning' : 'info';
@@ -174,16 +168,16 @@ const RouteDetails = ({ items, stopStatuses = {}, onMarkDone, onMarkFailed, onCo
             </Card>
 
             <Card style={{ padding: '0.9rem' }}>
-                <SectionHeader title="Abrir em apps de navegação" />
+                <SectionHeader title="Navegação externa" subtitle="Abra a próxima entrega ou a rota completa." />
                 <div className="route-external-actions">
-                    <Button variant="primary" onClick={openWaze} disabled={!hasPendingStop}>
-                        <Navigation size={16} /> Abrir no Waze
+                    <Button variant="primary" onClick={openNextStopGoogleMaps} disabled={!hasPendingStop}>
+                        <Navigation size={16} /> Navegar para próxima parada
                     </Button>
                     <Button variant="outline" onClick={openGoogleMaps} disabled={!hasRouteToOpen}>
-                        <ExternalLink size={16} /> Abrir no Google Maps
+                        <ExternalLink size={16} /> Abrir rota completa
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint} style={{ gridColumn: '1 / -1' }} disabled={items.length === 0}>
-                        Imprimir paradas
+                        Imprimir lista de paradas
                     </Button>
                 </div>
             </Card>

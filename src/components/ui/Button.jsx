@@ -7,6 +7,7 @@ const Button = ({
     fullWidth = false,
     className = '',
     style = {},
+    type = 'button',
     ...props
 }) => {
     const variantMap = {
@@ -23,6 +24,7 @@ const Button = ({
 
     return (
         <button
+            type={type}
             className={['btn', variantClass, sizeClass, widthClass, className].filter(Boolean).join(' ')}
             style={style}
             {...props}

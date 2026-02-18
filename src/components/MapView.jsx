@@ -109,7 +109,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
     };
 
     return (
-        <div style={{ height: '100%', width: '100%', position: 'relative', background: '#e5e7eb' }}>
+        <div className="map-canvas-wrap">
             <MapContainer
                 center={[-22.3156, -49.0606]}
                 zoom={12}
@@ -183,20 +183,20 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
             </MapContainer>
 
             {items.length === 0 && (
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, textAlign: 'center', background: 'rgba(255,255,255,0.9)', padding: '1rem', borderRadius: '12px', boxShadow: 'var(--shadow)' }}>
-                    <p style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Aguardando endereços...</p>
+                <div className="map-overlay-card map-overlay-empty">
+                    <p>Aguardando endereços...</p>
                 </div>
             )}
 
-            <div style={{ position: 'absolute', right: '10px', bottom: '10px', zIndex: 900, background: 'rgba(255,255,255,0.9)', borderRadius: '8px', padding: '6px 10px', fontSize: '12px', border: '1px solid #d1d5db' }}>
+            <div className="map-overlay-card map-overlay-provider">
                 Mapa base: {provider.name}
             </div>
 
             {!hasLoadedTile && (
-                <div style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 900, background: 'rgba(255,255,255,0.95)', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', border: '1px solid #d1d5db', maxWidth: '220px' }}>
-                    <p style={{ marginBottom: '6px', color: '#334155' }}>Carregando mapa. Se não abrir, toque em "Alterar base".</p>
+                <div className="map-overlay-card map-overlay-warning">
+                    <p>Carregando mapa. Se não abrir, toque em "Alterar base".</p>
                     <button
-                        style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 8px', background: '#fff', cursor: 'pointer' }}
+                        className="map-overlay-button"
                         onClick={() => {
                             setHasLoadedTile(false);
                             tileErrorCountRef.current = 0;

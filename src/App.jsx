@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   Play, RefreshCw, Navigation, Zap, Map as MapIcon,
-  Truck, LayoutGrid, Settings as SettingsIcon,
+  Truck, LayoutGrid, Settings as SettingsIcon, History,
   Sun, Moon
 } from 'lucide-react';
 
@@ -23,6 +23,11 @@ const MapView = lazy(() => import('./components/MapView'));
 const WORKSPACE_KEY = 'rota_mestra_v4_elite';
 const HISTORY_KEY = 'rota_mestra_v4_history';
 const ACTION_QUEUE_KEY = 'rota_mestra_action_queue_v1';
+const PANEL_TABS = [
+  { key: 'optimizer', label: 'Planejamento', Icon: LayoutGrid },
+  { key: 'history', label: 'Histórico', Icon: History },
+  { key: 'settings', label: 'Configurações', Icon: SettingsIcon }
+];
 const hasValidCoords = (item) => Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
 const isStopResolved = (statusValue) => statusValue === 'done' || statusValue === 'failed';
 const buildInitialStopStatuses = (routeItems) => routeItems.reduce((acc, item, idx) => {
@@ -61,6 +66,12 @@ function App() {
   const [showMoreTools, setShowMoreTools] = useState(false);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
   const [operationMode, setOperationMode] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
+    return Boolean(window.navigator.standalone);
+  });
   const [pendingActions, setPendingActions] = useState(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -128,6 +139,74 @@ function App() {
   }, [toast]);
 
   const showToast = (message, type = 'info') => setToast({ message, type });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const onBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    };
+
+    const onAppInstalled = () => {
+      setIsAppInstalled(true);
+      setInstallPromptEvent(null);
+      setToast({ message: 'Aplicativo instalado com sucesso.', type: 'success' });
+    };
+
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const onDisplayModeChange = (e) => {
+      if (e.matches) {
+        setIsAppInstalled(true);
+        setInstallPromptEvent(null);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    window.addEventListener('appinstalled', onAppInstalled);
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', onDisplayModeChange);
+    } else {
+      mediaQuery.addListener(onDisplayModeChange);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', onAppInstalled);
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', onDisplayModeChange);
+      } else {
+        mediaQuery.removeListener(onDisplayModeChange);
+      }
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (isAppInstalled) {
+      showToast('Este app já está instalado neste dispositivo.', 'info');
+      return;
+    }
+
+    if (installPromptEvent) {
+      installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+      setInstallPromptEvent(null);
+      if (choice?.outcome === 'accepted') {
+        showToast('Instalação iniciada.', 'success');
+      } else {
+        showToast('Instalação cancelada.', 'info');
+      }
+      return;
+    }
+
+    const ua = String(window.navigator.userAgent || '').toLowerCase();
+    const isIos = /iphone|ipad|ipod/.test(ua);
+    if (isIos) {
+      showToast('No Safari: Compartilhar -> Adicionar à Tela de Início.', 'info');
+      return;
+    }
+    showToast('No Chrome/Edge: menu do navegador -> Instalar aplicativo.', 'info');
+  };
 
   const resetWorkspace = () => {
     if (!window.confirm('Deseja limpar a rota atual e começar uma nova?')) return;
@@ -301,7 +380,9 @@ function App() {
       showToast('Não há próxima parada pendente.', 'info');
       return;
     }
-    window.open(`https://waze.com/ul?ll=${currentItem.coords.lat},${currentItem.coords.lon}&navigate=yes`, '_blank', 'noopener,noreferrer');
+    const destination = `${currentItem.coords.lat},${currentItem.coords.lon}`;
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
   };
   const saveCurrentRoute = () => {
     if (!items.length || !routeInfo) return;
@@ -325,6 +406,14 @@ function App() {
     : status === 'geocoding'
       ? 'Geocodificando endereços'
       : 'Otimizando rota';
+  const routeCount = Math.max(0, items.length - 1);
+  const headerStageLabel = status === 'ready'
+    ? 'Rota pronta'
+    : status === 'geocoding' || status === 'optimizing' || status === 'uploading'
+      ? processingLabel
+      : routeCount > 0
+        ? 'Aguardando otimização'
+        : 'Novo planejamento';
   const detectedCity = (() => {
     const cityCounter = new Map();
     items.forEach((item) => {
@@ -343,19 +432,48 @@ function App() {
     });
     return best;
   })();
+  const switchToTab = (tabKey) => {
+    setActiveTab(tabKey);
+    if (isMobile) setMobileView('panel');
+  };
 
   return (
     <div className="app-shell">
       <header className="top-glass">
         <div className="brand-elite">
           <div className="brand-icon-box"><Truck size={20} /></div>
-          <span className="brand-text">RotaBoa</span>
+          <div className="brand-copy">
+            <span className="brand-text">RotaBoa</span>
+            <span className="brand-caption hide-mobile">Roteirização inteligente para operação diária</span>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="header-kpis hide-mobile">
+          <div className="header-pill">
+            <span className={`status-dot ${status === 'ready' ? 'status-dot-success' : ''}`} />
+            {headerStageLabel}
+          </div>
+          <div className="header-pill">
+            {routeCount} parada(s)
+          </div>
+          <div className={`header-pill ${isOnline ? 'header-pill-online' : 'header-pill-offline'}`}>
+            {isOnline ? 'Online' : 'Offline'}
+          </div>
+        </div>
+        <div className="top-glass-actions">
+          <Button
+            variant={activeTab === 'settings' ? 'primary' : 'outline'}
+            className="top-glass-settings-btn"
+            onClick={() => switchToTab('settings')}
+            aria-label="Abrir configurações"
+            title="Configurações"
+          >
+            <SettingsIcon size={16} />
+            <span className="hide-mobile">Configurações</span>
+          </Button>
           {!isMobile && (
             <Button
               variant="o"
-              style={{ width: '42px', padding: 0, borderRadius: '12px' }}
+              className="top-glass-icon-btn"
               onClick={toggleTheme}
               aria-label={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
               title={isDarkMode ? 'Ativar tema claro' : 'Ativar tema escuro'}
@@ -364,7 +482,7 @@ function App() {
             </Button>
           )}
           {!isMobile && items.length > 0 && (
-            <Button variant="o" style={{ borderRadius: '12px' }} onClick={resetWorkspace}>
+            <Button variant="o" className="top-glass-reset-btn" onClick={resetWorkspace}>
               Nova rota
             </Button>
           )}
@@ -376,6 +494,19 @@ function App() {
         {/* SIDE PANEL (Panel view on mobile) */}
         <aside className={`side-panel ${isMobile && mobileView === 'map' ? 'hidden' : ''}`}>
           <div className="bento-scroll">
+            <div className="panel-tabbar">
+              {PANEL_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`panel-tab ${activeTab === tab.key ? 'panel-tab-active' : ''}`}
+                  onClick={() => switchToTab(tab.key)}
+                >
+                  <tab.Icon size={16} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
             <>
               {activeTab === 'optimizer' && (
                 <div key="opt">
@@ -422,34 +553,34 @@ function App() {
 
                   {/* Processing Status */}
                   {(status === 'geocoding' || status === 'optimizing' || status === 'uploading') && (
-                    <div className="bento-card text-center">
-                      <div className="loading-spinner" style={{ margin: '0 auto 1rem', width: '44px', height: '44px' }} />
-                      <h3 style={{ fontWeight: 800 }}>{processingLabel}</h3>
-                      <div className="progress-bar-track" style={{ height: '10px', marginTop: '1.5rem' }}>
-                        <div className="progress-bar-fill" style={{ width: `${progress}%`, borderRadius: '10px' }} />
+                    <div className="bento-card text-center processing-card">
+                      <div className="loading-spinner processing-spinner" />
+                      <h3 className="processing-title">{processingLabel}</h3>
+                      <div className="progress-bar-track processing-track">
+                        <div className="progress-bar-fill processing-fill" style={{ width: `${progress}%` }} />
                       </div>
-                      <p style={{ marginTop: '0.75rem', fontWeight: 800, color: 'var(--primary)' }}>{progress}%</p>
+                      <p className="processing-percent">{progress}%</p>
                     </div>
                   )}
 
                   {/* Pre-Calculation Bento Config */}
                   {status === 'idle' && items.length > 0 && (
-                    <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="animate-slide-up panel-stack">
                       <div className="bento-card">
-                        <h3 style={{ fontWeight: 800, marginBottom: '0.7rem' }}>Configurar rota</h3>
-                        <div className="import-ready-pill">Arquivo pronto para otimização</div>
-                        <p className="clean-muted" style={{ marginBottom: '0.35rem' }}>{Math.max(0, items.length - 1)} parada(s).</p>
-                        {detectedCity && <p className="clean-muted" style={{ marginBottom: '0.75rem' }}>Região principal: {detectedCity}</p>}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem', marginBottom: '0.8rem' }}>
+                        <h3 className="planner-title">Planejar rota</h3>
+                        <div className="import-ready-pill">Planilha validada para otimização</div>
+                        <p className="clean-muted planner-meta">{Math.max(0, items.length - 1)} parada(s).</p>
+                        {detectedCity && <p className="clean-muted planner-city">Região principal: {detectedCity}</p>}
+                        <div className="planner-quick-actions">
                           <Button variant="outline" size="sm" fullWidth onClick={() => setShowAdvancedConfig((v) => !v)}>
                             {showAdvancedConfig ? 'Ocultar opções' : 'Mais opções'}
                           </Button>
                           <Button variant="outline" size="sm" fullWidth onClick={resetWorkspace}>
-                            Remover arquivo
+                            Trocar planilha
                           </Button>
                         </div>
 
-                        <div style={{ display: 'grid', gap: '1rem' }}>
+                        <div className="planner-form-grid">
                           <div className="config-option">
                             <span className="config-label">Otimizar por</span>
                             <select value={optimizeBy} onChange={e => setOptimizeBy(e.target.value)}>
@@ -476,7 +607,7 @@ function App() {
                             </>
                           )}
                           <Button variant="p" fullWidth size="lg" className="sticky-optimize-btn" onClick={startOptimization}>
-                            <Zap size={20} fill="white" /> Gerar rota otimizada
+                            <Zap size={20} fill="white" /> Otimizar rota
                           </Button>
                         </div>
                       </div>
@@ -485,14 +616,14 @@ function App() {
 
                   {/* Ready State - Dasboard Bento */}
                   {status === 'ready' && routeInfo && (
-                    <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="animate-slide-up ready-stack">
                       {!currentItem && (
                         <div className="bento-card clean-next-stop-card">
-                          <p style={{ fontWeight: 800 }}>Rota finalizada</p>
-                          <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                          <p className="finished-title">Rota finalizada</p>
+                          <p className="finished-subtitle">
                             Todas as entregas foram concluídas.
                           </p>
-                          <div className="quick-overview-grid" style={{ marginTop: '0.8rem' }}>
+                          <div className="quick-overview-grid finished-grid">
                             <span>Objetivo: <b>{routeObjectiveLabel}</b></span>
                             <span>Concluídas: <b>{deliveryStats.done}</b></span>
                             <span>Falhas: <b>{deliveryStats.failed}</b></span>
@@ -502,29 +633,29 @@ function App() {
 
                       {currentItem && (
                         <div className="bento-card clean-next-stop-card">
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <div className="next-stop-head">
                             <p className="config-label">Próxima parada</p>
-                            <p style={{ fontSize: '0.8rem', fontWeight: 800 }}>{deliveryProgressPercent}%</p>
+                            <p className="next-stop-percent">{deliveryProgressPercent}%</p>
                           </div>
-                          <div className="progress-bar-track" style={{ height: '7px', marginTop: '0.4rem' }}>
-                            <div className="progress-bar-fill" style={{ width: `${deliveryProgressPercent}%`, borderRadius: '8px' }} />
+                          <div className="progress-bar-track next-stop-track">
+                            <div className="progress-bar-fill next-stop-fill" style={{ width: `${deliveryProgressPercent}%` }} />
                           </div>
-                          <p style={{ fontWeight: 800, marginTop: '0.3rem' }}>{currentItem.address}</p>
+                          <p className="next-stop-address">{currentItem.address}</p>
                           {currentItem.observation && (
-                            <p className="clean-muted" style={{ marginTop: '0.35rem' }}>
+                            <p className="clean-muted next-stop-ref">
                               Referência: {currentItem.observation}
                             </p>
                           )}
-                          <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.8rem' }}>
-                            <Button variant="primary" size="lg" onClick={openCurrentNavigation}>
-                              <Navigation size={16} /> Abrir no Waze
+                          <div className="delivery-action-grid next-stop-actions">
+                            <Button variant="outline" size="lg" className="action-btn action-btn-maps" onClick={openCurrentNavigation}>
+                              <Navigation size={16} /> Abrir no Google Maps
                             </Button>
-                            <div className="secondary-actions-row">
-                              <Button variant="success" onClick={() => markStatus(currentIdx, 'done')}>
-                                Concluir entrega
+                            <div className="secondary-actions-row secondary-actions-row-strong">
+                              <Button variant="success" className="action-btn action-btn-success" onClick={() => markStatus(currentIdx, 'done')}>
+                                Marcar como entregue
                               </Button>
-                              <Button variant="danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                                Marcar falha
+                              <Button variant="danger" className="action-btn action-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
+                                Marcar não entregue
                               </Button>
                             </div>
                           </div>
@@ -532,22 +663,17 @@ function App() {
                       )}
 
                       {upcomingStops.length > 0 && (
-                        <div className="bento-card" style={{ padding: '0.8rem 0.9rem' }}>
-                          <p className="config-label" style={{ marginBottom: '0.5rem' }}>Próximas entregas</p>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                        <div className="bento-card upcoming-card">
+                          <p className="config-label upcoming-title">Próximas entregas</p>
+                          <div className="upcoming-list">
                             {upcomingStops.map(({ item, idx }, position) => (
-                              <div key={`upcoming-${item.id}`} style={{
-                                border: '1px solid var(--border)',
-                                borderRadius: '10px',
-                                padding: '0.45rem 0.55rem',
-                                background: 'rgba(var(--bg-rgb), 0.5)'
-                              }}>
-                                <p style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                              <div key={`upcoming-${item.id}`} className="upcoming-item">
+                                <p className="upcoming-item-label">
                                   {position === 0 ? `Agora · Parada ${idx + 1}` : `Depois · Parada ${idx + 1}`}
                                 </p>
-                                <p style={{ fontSize: '0.84rem', fontWeight: 700, marginTop: '0.12rem' }}>{item.address}</p>
+                                <p className="upcoming-item-address">{item.address}</p>
                                 {item.observation && (
-                                  <p className="clean-muted" style={{ marginTop: '0.12rem' }}>
+                                  <p className="clean-muted upcoming-item-ref">
                                     Ref.: {item.observation}
                                   </p>
                                 )}
@@ -558,7 +684,7 @@ function App() {
                       )}
 
                       <Button variant="outline" size="sm" fullWidth onClick={() => setShowMoreTools((v) => !v)}>
-                        {showMoreTools ? 'Ocultar ferramentas' : 'Mostrar ferramentas'}
+                        {showMoreTools ? 'Ocultar ações avançadas' : 'Mostrar ações avançadas'}
                       </Button>
 
                       {showMoreTools && (
@@ -598,32 +724,32 @@ function App() {
                       )}
                       {isMobile && (
                         <Button variant="primary" fullWidth onClick={() => { setOperationMode(true); setMobileView('map'); }}>
-                          <Navigation size={16} /> Modo motorista
+                          <Navigation size={16} /> Modo operação
                         </Button>
                       )}
                       {showMoreTools && showRouteSummary && (
-                        <div className="bento-card" style={{ padding: '0.9rem' }}>
+                        <div className="bento-card summary-card">
                           <p className="config-label">Resumo</p>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginTop: '0.5rem' }}>
+                          <div className="summary-grid">
                             <div>
-                              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>Distância total</p>
-                              <p style={{ fontWeight: 800 }}>{optimizedKm !== null ? `${optimizedKm.toFixed(1)} km` : '--'}</p>
+                              <p className="summary-label">Distância total</p>
+                              <p className="summary-value">{optimizedKm !== null ? `${optimizedKm.toFixed(1)} km` : '--'}</p>
                             </div>
                             <div>
-                              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>Combustível (estimado)</p>
-                              <p style={{ fontWeight: 800 }}>{estimatedFuelCost !== null ? `R$ ${estimatedFuelCost.toFixed(2)}` : '--'}</p>
+                              <p className="summary-label">Combustível (estimado)</p>
+                              <p className="summary-value">{estimatedFuelCost !== null ? `R$ ${estimatedFuelCost.toFixed(2)}` : '--'}</p>
                             </div>
                           </div>
                           {baselineKm !== null && baselineMin !== null && optimizedMin !== null && (
-                            <div style={{ marginTop: '0.55rem' }}>
-                              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            <div className="summary-compare-wrap">
+                              <p className="summary-compare">
                                 Comparação: antes <b>{baselineKm.toFixed(1)} km / {baselineMin} min</b> · agora <b>{optimizedKm?.toFixed(1)} km / {optimizedMin} min</b>
                               </p>
-                              <p style={{ fontSize: '0.72rem', color: 'var(--success)', fontWeight: 700, marginTop: '0.2rem' }}>
+                              <p className="summary-saving">
                                 Economia: {savedKm !== null ? `${savedKm.toFixed(1)} km` : '--'} e {savedMin !== null ? `${savedMin} min` : '--'}
                               </p>
                               {routeQuality && (
-                                <p style={{ fontSize: '0.72rem', color: routeQuality.tone === 'success' ? 'var(--success)' : 'var(--text-muted)', fontWeight: 700, marginTop: '0.2rem' }}>
+                                <p className={`summary-quality ${routeQuality.tone === 'success' ? 'summary-quality-success' : ''}`}>
                                   Qualidade da otimização: {routeQuality.label}
                                 </p>
                               )}
@@ -651,8 +777,7 @@ function App() {
                     setShowMoreTools(false);
                     setShowAdvancedConfig(false);
                     setOperationMode(false);
-                    setMobileView('panel');
-                    setActiveTab('optimizer');
+                    switchToTab('optimizer');
                   }} />
                 </div>
               )}
@@ -662,10 +787,12 @@ function App() {
                   <SettingsPanel
                     onClearWorkspace={resetWorkspace}
                     onClearHistory={() => persistHistory([])}
-                    onOpenHistory={() => setActiveTab('history')}
-                    onBackToOptimizer={() => setActiveTab('optimizer')}
+                    onOpenHistory={() => switchToTab('history')}
+                    onBackToOptimizer={() => switchToTab('optimizer')}
                     onToggleTheme={toggleTheme}
                     isDarkMode={isDarkMode}
+                    onInstallApp={handleInstallApp}
+                    isAppInstalled={isAppInstalled}
                   />
                 </div>
               )}
@@ -682,17 +809,20 @@ function App() {
           {/* Floating Mobile Map HUD */}
           {isMobile && !operationMode && mobileView === 'map' && status === 'ready' && currentItem && (
             <div className="hud-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <div className="status-glow" style={{ background: 'var(--primary)' }} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PRÓXIMA PARADA</span>
+              <div className="hud-head">
+                <div className="status-glow" />
+                <span className="hud-title">PRÓXIMA PARADA</span>
               </div>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1.25rem' }}>{currentItem.address}</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '0.75rem' }}>
-                <button className="btn-elite btn-p" onClick={openCurrentNavigation}>
-                  <Navigation size={18} fill="white" /> NAVEGAR
+              <h2 className="hud-address">{currentItem.address}</h2>
+              <div className="hud-action-grid">
+                <button className="btn-elite btn-p hud-action-btn" onClick={openCurrentNavigation}>
+                  <Navigation size={18} fill="white" /> Navegar
                 </button>
-                <button className="btn-elite btn-o" onClick={() => markStatus(currentIdx, 'done')}>
-                  ENTREGUE
+                <button className="btn-elite btn-success hud-action-btn" onClick={() => markStatus(currentIdx, 'done')}>
+                  Entregue
+                </button>
+                <button className="btn-elite btn-danger hud-action-btn" onClick={() => markStatus(currentIdx, 'failed')}>
+                  Falha
                 </button>
               </div>
             </div>
@@ -701,7 +831,7 @@ function App() {
           {isMobile && operationMode && status === 'ready' && (
             <div className="operation-mode-overlay">
               <div className="operation-mode-head">
-                <span>Modo motorista</span>
+                <span>Modo operação</span>
                 <button type="button" className="operation-close-btn" onClick={() => setOperationMode(false)}>
                   Fechar
                 </button>
@@ -716,10 +846,10 @@ function App() {
                       Entregue
                     </button>
                     <button type="button" className="operation-btn operation-btn-primary" onClick={openCurrentNavigation}>
-                      <Navigation size={20} /> Navegar
+                      <Navigation size={20} /> Google Maps
                     </button>
                     <button type="button" className="operation-btn operation-btn-danger" onClick={() => markStatus(currentIdx, 'failed')}>
-                      Marcar falha
+                      Não entregue
                     </button>
                   </div>
                 </>
@@ -740,10 +870,10 @@ function App() {
         <nav className="mobile-nav-pill">
           <button
             className={`nav-item ${mobileView === 'panel' && activeTab === 'optimizer' ? 'active' : ''}`}
-            onClick={() => { setMobileView('panel'); setActiveTab('optimizer'); }}
+            onClick={() => switchToTab('optimizer')}
           >
             <LayoutGrid size={18} />
-            Painel
+            Planejamento
           </button>
           <button
             className={`nav-item ${mobileView === 'map' ? 'active' : ''}`}
@@ -759,15 +889,7 @@ function App() {
             disabled={!currentItem && status !== 'idle'}
           >
             {status === 'ready' ? <Navigation size={20} fill="white" /> : <Play size={20} fill="white" />}
-            {status === 'ready' ? 'Ir para próxima' : 'Gerar rota'}
-          </button>
-
-          <button
-            className={`nav-item ${mobileView === 'panel' && activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => { setMobileView('panel'); setActiveTab('settings'); }}
-          >
-            <SettingsIcon size={18} />
-            Configurações
+            {status === 'ready' ? 'Navegar agora' : 'Otimizar rota'}
           </button>
         </nav>
       )}
@@ -779,7 +901,7 @@ function App() {
         </div>
       )}
       {isMobile && pendingActions.length > 0 && (
-        <div className="app-toast app-toast-info" style={{ bottom: '146px' }}>
+        <div className="app-toast app-toast-info app-toast-queue">
           {pendingActions.length} ação(ões) aguardando conexão
         </div>
       )}
