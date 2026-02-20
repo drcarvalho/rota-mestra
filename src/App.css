@@ -1018,6 +1018,56 @@ header {
   gap: 1rem;
 }
 
+.geocode-issues-card {
+  margin-top: 0.9rem;
+  padding: 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 145, 0, 0.35);
+  background: rgba(255, 145, 0, 0.08);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.geocode-issues-subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.geocode-issues-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.geocode-issue-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.geocode-issue-item input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-size: 0.84rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.geocode-issue-item input:focus {
+  outline: none;
+  border-color: rgba(var(--primary-rgb), 0.5);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.16);
+}
+
+.geocode-issues-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
 .counter-mode-bar {
   display: flex;
   flex-direction: column;
@@ -1791,6 +1841,21 @@ header {
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 0.25rem;
+}
+
+.settings-metrics {
+  padding: 0.7rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(var(--card-bg-rgb), 0.64);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.settings-metrics p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .map-canvas-wrap {

@@ -12,7 +12,11 @@ const SettingsPanel = ({
     onToggleTheme,
     isDarkMode,
     onInstallApp,
-    isAppInstalled
+    isAppInstalled,
+    geocodeMode,
+    onChangeGeocodeMode,
+    geocodeMetrics,
+    onClearGeocodeCache
 }) => {
     return (
         <Card className="animate-fade-in">
@@ -29,6 +33,21 @@ const SettingsPanel = ({
                 <p className="settings-intro">
                     Opções rápidas do dia a dia.
                 </p>
+
+                <div className="config-option">
+                    <span className="config-label">Modo de geocodificação</span>
+                    <select value={geocodeMode} onChange={(e) => onChangeGeocodeMode(e.target.value)}>
+                        <option value="fast">Rápido (recomendado)</option>
+                        <option value="accurate">Preciso (mais lento)</option>
+                    </select>
+                </div>
+
+                <div className="settings-metrics">
+                    <p><b>Última execução:</b> {Math.round((geocodeMetrics?.durationMs || 0) / 1000)}s</p>
+                    <p><b>Endereços únicos:</b> {geocodeMetrics?.uniqueAddresses || 0} · <b>2ª fase:</b> {geocodeMetrics?.secondPassLookups || 0}</p>
+                    <p><b>Cache:</b> {geocodeMetrics?.cacheHits || 0} hit(s) / {geocodeMetrics?.cacheMisses || 0} miss(es)</p>
+                    <p><b>Requests:</b> {geocodeMetrics?.networkRequests || 0} · <b>Sucesso:</b> {geocodeMetrics?.successCount || 0} · <b>Falha:</b> {geocodeMetrics?.errorCount || 0}</p>
+                </div>
 
                 {/* Actions */}
                 <div className="settings-actions">
@@ -52,6 +71,9 @@ const SettingsPanel = ({
                             <CheckCircle2 size={15} /> App já instalado
                         </Button>
                     )}
+                    <Button variant="outline" onClick={onClearGeocodeCache} fullWidth>
+                        <Trash2 size={15} /> Limpar cache de geocodificação
+                    </Button>
                     <Button variant="outline" onClick={onClearWorkspace} fullWidth>
                         <Trash2 size={15} /> Limpar rota atual
                     </Button>

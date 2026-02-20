@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 import { parseFile } from './utils/fileParser';
-import { geocodeBatch } from './utils/geocoding';
+import { geocodeBatch, clearGeocodeCache } from './utils/geocoding';
 import { optimizeRoute } from './utils/optimizer';
 import { buildStopGroups } from './utils/stopGrouping';
 
@@ -25,6 +25,7 @@ const WORKSPACE_KEY = 'rota_mestra_v4_elite';
 const HISTORY_KEY = 'rota_mestra_v4_history';
 const ACTION_QUEUE_KEY = 'rota_mestra_action_queue_v1';
 const DRIVER_DETAIL_KEY = 'rota_mestra_driver_detail_mode_v1';
+const GEOCODE_MODE_KEY = 'rota_mestra_geocode_mode_v1';
 const PANEL_TABS = [
   { key: 'optimizer', label: 'Início', Icon: LayoutGrid },
   { key: 'history', label: 'Histórico', Icon: History },
@@ -114,6 +115,30 @@ function App() {
   const [deliveryCountMode, setDeliveryCountMode] = useState('stops');
   const [operationMode, setOperationMode] = useState(false);
   const [autoReoptimize, setAutoReoptimize] = useState(true);
+  const [geocodeMode, setGeocodeMode] = useState(() => {
+    if (typeof window === 'undefined') return 'fast';
+    try {
+      const saved = localStorage.getItem(GEOCODE_MODE_KEY);
+      return saved === 'accurate' ? 'accurate' : 'fast';
+    } catch {
+      return 'fast';
+    }
+  });
+  const [geocodeMetrics, setGeocodeMetrics] = useState({
+    mode: 'fast',
+    total: 0,
+    processed: 0,
+    successCount: 0,
+    errorCount: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    uniqueAddresses: 0,
+    secondPassLookups: 0,
+    networkRequests: 0,
+    durationMs: 0
+  });
+  const [geocodeIssues, setGeocodeIssues] = useState([]);
+  const [geocodeIssueEdits, setGeocodeIssueEdits] = useState({});
   const [driverDetailMode, setDriverDetailMode] = useState(() => {
     if (typeof window === 'undefined') return 'detailed';
     try {
@@ -202,6 +227,14 @@ function App() {
       // noop
     }
   }, [driverDetailMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GEOCODE_MODE_KEY, geocodeMode);
+    } catch {
+      // noop
+    }
+  }, [geocodeMode]);
 
   const showToast = (message, type = 'info') => setToast({ message, type });
 
@@ -329,9 +362,37 @@ function App() {
       setOperationMode(false);
       setActiveTab('optimizer');
       setMobileView('panel');
+      setGeocodeIssues([]);
+      setGeocodeIssueEdits({});
       setStatus('idle');
       showToast('Planilha carregada.', 'success');
     } catch (err) { showToast(err.message, 'error'); setStatus('idle'); }
+  };
+
+  const applyGeocodeIssueEdits = () => {
+    if (!geocodeIssues.length) return;
+    const updates = new Map();
+    geocodeIssues.forEach((issue) => {
+      const nextAddress = String(geocodeIssueEdits[String(issue.id)] ?? issue.address).trim();
+      if (nextAddress && nextAddress !== issue.address) {
+        updates.set(String(issue.id), nextAddress);
+      }
+    });
+    if (updates.size === 0) {
+      showToast('Edite ao menos um endereço para atualizar.', 'info');
+      return;
+    }
+    setItems((prev) => prev.map((item) => {
+      const key = String(item.id);
+      if (!updates.has(key)) return item;
+      return { ...item, address: updates.get(key) };
+    }));
+    setGeocodeIssues((prev) => prev.map((issue) => {
+      const key = String(issue.id);
+      if (!updates.has(key)) return issue;
+      return { ...issue, address: updates.get(key) };
+    }));
+    showToast(`${updates.size} endereço(s) atualizado(s). Clique em "Otimizar rota" novamente.`, 'success');
   };
 
   const startOptimization = async () => {
@@ -339,13 +400,41 @@ function App() {
     if (status === 'geocoding' || status === 'optimizing' || status === 'uploading') return;
     setProgress(0);
     setStatus('geocoding');
+    setGeocodeMetrics({
+      mode: geocodeMode,
+      total: items.length,
+      processed: 0,
+      successCount: 0,
+      errorCount: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      uniqueAddresses: 0,
+      secondPassLookups: 0,
+      networkRequests: 0,
+      durationMs: 0
+    });
     let optimizeProgressTimer = null;
     try {
       const geo = await geocodeBatch(items, (c, t) => {
         // Phase 1: geocoding fills 0-80%
         const geocodeProgress = t > 0 ? Math.round((c / t) * 80) : 0;
         setProgress(Math.max(0, Math.min(80, geocodeProgress)));
+      }, {
+        mode: geocodeMode,
+        onMetrics: (metrics) => setGeocodeMetrics(metrics)
       });
+      const unresolvedItems = geo.filter((item) => item.status === 'error').map((item) => ({
+        id: item.id,
+        address: item.address,
+        observation: item.observation || ''
+      }));
+      setGeocodeIssues(unresolvedItems);
+      setGeocodeIssueEdits(
+        Object.fromEntries(unresolvedItems.map((issue) => [String(issue.id), issue.address]))
+      );
+      if (unresolvedItems.length > 0) {
+        showToast(`${unresolvedItems.length} endereço(s) não localizado(s). Revise no painel e tente novamente.`, 'info');
+      }
       const validItemsRaw = geo.filter((item) => item.status === 'success' && hasValidCoords(item));
       if (!validItemsRaw.length) {
         throw new Error('Não foi possível localizar os endereços da planilha.');
@@ -564,6 +653,7 @@ function App() {
     : status === 'geocoding'
       ? 'Geocodificando endereços'
       : 'Calculando melhor rota';
+  const geocodeElapsedLabel = `${Math.round((geocodeMetrics.durationMs || 0) / 1000)}s`;
   const packageCount = Math.max(0, items.length - 1);
   const stopGroups = useMemo(() => buildStopGroups(items), [items]);
   const stopCount = stopGroups.length;
@@ -765,6 +855,11 @@ function App() {
                         <div className="progress-bar-fill processing-fill" style={{ width: `${progress}%` }} />
                       </div>
                       <p className="processing-percent">{progress}%</p>
+                      {status === 'geocoding' && (
+                        <p className="clean-muted" style={{ marginTop: '0.45rem', fontSize: '0.78rem' }}>
+                          {geocodeMetrics.processed}/{geocodeMetrics.total} · únicos {geocodeMetrics.uniqueAddresses || 0} · fase 2 {geocodeMetrics.secondPassLookups || 0} · req {geocodeMetrics.networkRequests} · {geocodeElapsedLabel}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -823,6 +918,32 @@ function App() {
                             <Zap size={20} fill="white" /> Otimizar rota
                           </Button>
                         </div>
+                        {geocodeIssues.length > 0 && (
+                          <div className="geocode-issues-card">
+                            <p className="config-label">Endereços não localizados ({geocodeIssues.length})</p>
+                            <p className="clean-muted geocode-issues-subtitle">Ajuste os campos abaixo e execute a otimização novamente.</p>
+                            <div className="geocode-issues-list">
+                              {geocodeIssues.slice(0, 8).map((issue) => (
+                                <div key={`issue-${issue.id}`} className="geocode-issue-item">
+                                  <input
+                                    value={geocodeIssueEdits[String(issue.id)] ?? issue.address}
+                                    onChange={(e) => setGeocodeIssueEdits((prev) => ({ ...prev, [String(issue.id)]: e.target.value }))}
+                                    placeholder="Corrija o endereço"
+                                  />
+                                  {issue.observation && <p className="clean-muted">Ref.: {issue.observation}</p>}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="geocode-issues-actions">
+                              <Button variant="outline" size="sm" fullWidth onClick={applyGeocodeIssueEdits}>
+                                Aplicar correções
+                              </Button>
+                              <Button variant="outline" size="sm" fullWidth onClick={() => { setGeocodeIssues([]); setGeocodeIssueEdits({}); }}>
+                                Limpar pendências
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1014,6 +1135,13 @@ function App() {
                     isDarkMode={isDarkMode}
                     onInstallApp={handleInstallApp}
                     isAppInstalled={isAppInstalled}
+                    geocodeMode={geocodeMode}
+                    onChangeGeocodeMode={(value) => setGeocodeMode(value === 'accurate' ? 'accurate' : 'fast')}
+                    geocodeMetrics={geocodeMetrics}
+                    onClearGeocodeCache={() => {
+                      clearGeocodeCache();
+                      showToast('Cache de geocodificação limpo.', 'success');
+                    }}
                   />
                 </div>
               )}

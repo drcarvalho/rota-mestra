@@ -1,0 +1,265 @@
+{
+  "acpi": {
+    "type": "bool",
+    "description": "Whether to enable ACPI",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "bios": {
+    "type": "string",
+    "description": "The BIOS implementation",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "boot_order": {
+    "type": [
+      "list",
+      "string"
+    ],
+    "description": "The guest will attempt to boot from devices in the order they appear here",
+    "description_kind": "plain",
+    "optional": true,
+    "computed": true
+  },
+  "delete_unreferenced_disks_on_destroy": {
+    "type": "bool",
+    "description": "Whether to delete unreferenced disks on destroy",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "description": {
+    "type": "string",
+    "description": "The description",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "hook_script_file_id": {
+    "type": "string",
+    "description": "A hook script",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "hotplug": {
+    "type": "string",
+    "description": "Selectively enable hotplug features. Use `0` to disable, `1` to enable all. Valid features: `disk`, `network`, `usb`, `memory`, `cpu`. Memory hotplug requires NUMA to be enabled.",
+    "description_kind": "plain",
+    "optional": true,
+    "computed": true
+  },
+  "id": {
+    "type": "string",
+    "description_kind": "plain",
+    "optional": true,
+    "computed": true
+  },
+  "ipv4_addresses": {
+    "type": [
+      "list",
+      [
+        "list",
+        "string"
+      ]
+    ],
+    "description": "The IPv4 addresses published by the QEMU agent",
+    "description_kind": "plain",
+    "computed": true
+  },
+  "ipv6_addresses": {
+    "type": [
+      "list",
+      [
+        "list",
+        "string"
+      ]
+    ],
+    "description": "The IPv6 addresses published by the QEMU agent",
+    "description_kind": "plain",
+    "computed": true
+  },
+  "keyboard_layout": {
+    "type": "string",
+    "description": "The keyboard layout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "kvm_arguments": {
+    "type": "string",
+    "description": "The args implementation",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "mac_addresses": {
+    "type": [
+      "list",
+      "string"
+    ],
+    "description": "The MAC addresses for the network interfaces",
+    "description_kind": "plain",
+    "optional": true,
+    "computed": true
+  },
+  "machine": {
+    "type": "string",
+    "description": "The VM machine type, either default `pc` or `q35`",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "migrate": {
+    "type": "bool",
+    "description": "Whether to migrate the VM on node change instead of re-creating it",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "name": {
+    "type": "string",
+    "description": "The name",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "network_interface_names": {
+    "type": [
+      "list",
+      "string"
+    ],
+    "description": "The network interface names published by the QEMU agent",
+    "description_kind": "plain",
+    "computed": true
+  },
+  "node_name": {
+    "type": "string",
+    "description": "The node name",
+    "description_kind": "plain",
+    "required": true
+  },
+  "on_boot": {
+    "type": "bool",
+    "description": "Start VM on Node boot",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "pool_id": {
+    "type": "string",
+    "description": "The ID of the pool to assign the virtual machine to",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "protection": {
+    "type": "bool",
+    "description": "Sets the protection flag of the VM. This will disable the remove VM and remove disk operations",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "purge_on_destroy": {
+    "type": "bool",
+    "description": "Whether to purge the VM from backup configurations on destroy",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "reboot": {
+    "type": "bool",
+    "description": "Whether to reboot VM after creation",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "reboot_after_update": {
+    "type": "bool",
+    "description": "Whether to reboot VM after update if needed",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "scsi_hardware": {
+    "type": "string",
+    "description": "The SCSI hardware type",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "started": {
+    "type": "bool",
+    "description": "Whether to start the virtual machine",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "stop_on_destroy": {
+    "type": "bool",
+    "description": "Whether to stop rather than shutdown on VM destroy",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "tablet_device": {
+    "type": "bool",
+    "description": "Whether to enable the USB tablet device",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "tags": {
+    "type": [
+      "list",
+      "string"
+    ],
+    "description": "Tags of the virtual machine. This is only meta information.",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "template": {
+    "type": "bool",
+    "description": "Whether to create a template",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_clone": {
+    "type": "number",
+    "description": "Clone VM timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_create": {
+    "type": "number",
+    "description": "Create VM timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_migrate": {
+    "type": "number",
+    "description": "Migrate VM timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_move_disk": {
+    "type": "number",
+    "description": "Disk move timeout",
+    "description_kind": "plain",
+    "deprecated": true,
+    "optional": true
+  },
+  "timeout_reboot": {
+    "type": "number",
+    "description": "Reboot timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_shutdown_vm": {
+    "type": "number",
+    "description": "Shutdown timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_start_vm": {
+    "type": "number",
+    "description": "Start VM timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "timeout_stop_vm": {
+    "type": "number",
+    "description": "Stop VM timeout",
+    "description_kind": "plain",
+    "optional": true
+  },
+  "vm_id": {
+    "type": "number",
+    "description": "The VM identifier",
+    "description_kind": "plain",
+    "optional": true,
+    "computed": true
+  }
+}

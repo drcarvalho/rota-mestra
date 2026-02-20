@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    ports:
+      - "80:8787"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=8787
+    depends_on:
+      - redis
+    restart: always
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+volumes:
+  redis_data:

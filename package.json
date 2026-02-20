@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node server/geocode-server.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -24,6 +25,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
+    "redis": "^4.7.0",
     "tailwind-merge": "^3.4.1",
     "xlsx": "^0.18.5"
   },

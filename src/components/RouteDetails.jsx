@@ -18,24 +18,23 @@ import { buildStopGroups } from '../utils/stopGrouping';
 const RouteDetails = ({ items, stopStatuses = {}, deliveryCountMode = 'packages', onMarkDone, onMarkFailed, onCopyAddress, onActionFeedback }) => {
     const [searchTerm, setSearchTerm] = React.useState('');
     const pluralize = (count, singular, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`;
-
-    if (!items || items.length === 0) return null;
+    const routeItems = React.useMemo(() => (Array.isArray(items) ? items : []), [items]);
 
     const openGoogleMaps = () => {
-        if (items.length < 2) {
+        if (routeItems.length < 2) {
             onActionFeedback?.('Adicione pelo menos duas entregas para abrir a rota no Google Maps.', 'info');
             return;
         }
-        const origin = items[0].address;
-        const waypoints = items.slice(1, -1).map((i) => i.address).join('|');
-        const destination = items[items.length - 1].address;
+        const origin = routeItems[0].address;
+        const waypoints = routeItems.slice(1, -1).map((i) => i.address).join('|');
+        const destination = routeItems[routeItems.length - 1].address;
         const waypointsParam = waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '';
         const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsParam}&travelmode=driving`;
         window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     const openNextStopGoogleMaps = () => {
-        const next = items.find((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
+        const next = routeItems.find((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
         if (!next) {
             onActionFeedback?.('Nenhuma entrega pendente para navegação.', 'info');
             return;
@@ -49,7 +48,7 @@ const RouteDetails = ({ items, stopStatuses = {}, deliveryCountMode = 'packages'
 
     const exportCSV = () => {
         const headers = ['Ordem', 'Status', 'Endereço', 'Observação', 'Lat', 'Lon', 'Estimativa Chegada'];
-        const rows = items.map((item, idx) => [
+        const rows = routeItems.map((item, idx) => [
             idx + 1,
             idx === 0 ? 'partida' : (stopStatuses[String(item.id)] || 'pending'),
             `"${item.address.replace(/"/g, '""')}"`,
@@ -82,23 +81,25 @@ const RouteDetails = ({ items, stopStatuses = {}, deliveryCountMode = 'packages'
     };
 
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    const indexedItems = items.map((item, idx) => ({ item, idx }));
+    const indexedItems = routeItems.map((item, idx) => ({ item, idx }));
     const filteredItems = indexedItems.filter(({ item, idx }) =>
         String(item.address || '').toLowerCase().includes(normalizedSearch) ||
         String(idx + 1).includes(normalizedSearch)
     );
-    const showSearch = items.length > 20;
-    const hasPendingStop = items.some((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
-    const hasRouteToOpen = items.length >= 2;
-    const stopGroups = React.useMemo(() => buildStopGroups(items), [items]);
+    const showSearch = routeItems.length > 20;
+    const hasPendingStop = routeItems.some((item, idx) => idx > 0 && (stopStatuses[String(item.id)] || 'pending') === 'pending');
+    const hasRouteToOpen = routeItems.length >= 2;
+    const stopGroups = React.useMemo(() => buildStopGroups(routeItems), [routeItems]);
     const itemIndexById = React.useMemo(() => {
         const map = new Map();
-        items.forEach((item, idx) => map.set(String(item.id), idx));
+        routeItems.forEach((item, idx) => map.set(String(item.id), idx));
         return map;
-    }, [items]);
+    }, [routeItems]);
+
+    if (routeItems.length === 0) return null;
 
     const handlePrint = () => {
-        if (items.length === 0) {
+        if (routeItems.length === 0) {
             onActionFeedback?.('Não há entregas para imprimir.', 'info');
             return;
         }

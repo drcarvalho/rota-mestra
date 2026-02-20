@@ -78,22 +78,20 @@ const normalizeStreetNumberToken = (value) => {
     const withSeparator = withoutPrefix.match(/^(\d+)\s*[-/.]\s*(\d+)$/);
     if (withSeparator) return `${withSeparator[1]}-${withSeparator[2]}`;
 
-    if (/^\d{3,}$/.test(withoutPrefix)) {
-        const splitAt = withoutPrefix.length - 2;
-        return `${withoutPrefix.slice(0, splitAt)}-${withoutPrefix.slice(splitAt)}`;
-    }
-
     return withoutPrefix;
 };
 
 const normalizeAddressNumberNotation = (value) => {
     let text = String(value ?? '').trim();
     if (!text) return '';
+    const hasQuadraHint = /\b(?:quadra|qd)\s*\d+/i.test(text);
 
-    text = text.replace(
-        /\b(?:n(?:um(?:ero)?)?|n[º°o]?\.?)\s*(\d{3,})\b/gi,
-        (_, digits) => `N ${normalizeStreetNumberToken(digits)}`
-    );
+    if (hasQuadraHint) {
+        text = text.replace(
+            /\b(?:n(?:um(?:ero)?)?|n[º°o]?\.?)\s*(\d{3,})\b/gi,
+            (_, digits) => `N ${digits.length >= 3 ? `${digits.slice(0, digits.length - 2)}-${digits.slice(-2)}` : digits}`
+        );
+    }
 
     text = text.replace(
         /\b(?:n(?:um(?:ero)?)?|n[º°o]?\.?)\s*(\d+\s*[-/.]\s*\d+)\b/gi,
@@ -101,6 +99,135 @@ const normalizeAddressNumberNotation = (value) => {
     );
 
     return text.replace(/(\d+)\s*[/.]\s*(\d+)/g, '$1-$2');
+};
+
+const toTitleCase = (value) => {
+    const smallWords = new Set(['da', 'de', 'do', 'das', 'dos', 'e']);
+    return String(value ?? '')
+        .split(' ')
+        .filter(Boolean)
+        .map((word, idx) => {
+            const lower = word.toLowerCase();
+            if (idx > 0 && smallWords.has(lower)) return lower;
+            return lower.charAt(0).toUpperCase() + lower.slice(1);
+        })
+        .join(' ');
+};
+
+const normalizeZipCode = (value) => {
+    const digits = String(value ?? '').replace(/\D/g, '');
+    if (digits.length === 8) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+    return String(value ?? '').trim();
+};
+
+const BR_STATE_NAME_TO_UF = {
+    acre: 'AC',
+    alagoas: 'AL',
+    amapa: 'AP',
+    amazonas: 'AM',
+    bahia: 'BA',
+    ceara: 'CE',
+    'distrito federal': 'DF',
+    espiritosanto: 'ES',
+    goias: 'GO',
+    maranhao: 'MA',
+    matogrosso: 'MT',
+    matogrossodosul: 'MS',
+    minasgerais: 'MG',
+    para: 'PA',
+    paraiba: 'PB',
+    parana: 'PR',
+    pernambuco: 'PE',
+    piaui: 'PI',
+    riodejaneiro: 'RJ',
+    riograndedonorte: 'RN',
+    riograndedosul: 'RS',
+    rondonia: 'RO',
+    roraima: 'RR',
+    santacatarina: 'SC',
+    saopaulo: 'SP',
+    sergipe: 'SE',
+    tocantins: 'TO'
+};
+
+const normalizeStateCode = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const lettersOnly = raw.replace(/[^a-zA-Z]/g, '');
+    if (lettersOnly.length === 2) return lettersOnly.toUpperCase();
+
+    const normalizedName = normalizeText(raw).replace(/\s+/g, '');
+    return BR_STATE_NAME_TO_UF[normalizedName] || '';
+};
+
+export const sanitizeAddressSegment = (value) => {
+    let text = String(value ?? '').trim();
+    if (!text) return '';
+    const hasQuadraHint = /\b(?:quadra|qd)\s*\d+/i.test(text);
+    text = normalizeAddressNumberNotation(text);
+    text = text.replace(/\b(\d{5})-(\d{3})\b/g, '$1__ZIP__$2');
+    text = text
+        .replace(/[;|]/g, ', ')
+        .replace(/\s*-\s*/g, '-')
+        .replace(/\s*,\s*/g, ', ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\bav\.\s*/gi, 'Avenida ')
+        .replace(/\bav\b/gi, 'Avenida')
+        .replace(/\bavenida\b/gi, 'Avenida')
+        .replace(/\br\.\s*/gi, 'Rua ')
+        .replace(/\brua\b/gi, 'Rua')
+        .replace(/\btrav\.\s*/gi, 'Travessa ')
+        .replace(/\btravessa\b/gi, 'Travessa')
+        .replace(/\best\.\s*/gi, 'Estrada ')
+        .replace(/\bestrada\b/gi, 'Estrada')
+        .replace(/\brod\.\s*/gi, 'Rodovia ')
+        .replace(/\brod\b/gi, 'Rodovia')
+        .replace(/\brodovia\b/gi, 'Rodovia')
+        .replace(/\bqd(?:\.|ra)?\b/gi, 'Quadra')
+        .replace(/\blt(?:\.|e)?\b/gi, 'Lote')
+        .replace(/\bs\/?n\b/gi, 'S/N')
+        .replace(/\bbr[-\s]?(\d{2,3})\b/gi, 'BR-$1')
+        .replace(/\bn(?:um(?:ero)?)?\s+/gi, 'N ')
+        .replace(/,\s*(\d{3,4})\s*(?=,|$)/g, (_, digits) => (hasQuadraHint ? `, N ${digits.length >= 3 ? `${digits.slice(0, digits.length - 2)}-${digits.slice(-2)}` : digits}` : `, ${digits}`))
+        .replace(/\b(\d{3,4})\s*(?=,)/g, (_, digits) => (hasQuadraHint && digits.length >= 3 ? `${digits.slice(0, digits.length - 2)}-${digits.slice(-2)}` : digits))
+        .replace(/\s+,/g, ',')
+        .replace(/,+/g, ',')
+        .replace(/^,\s*|\s*,\s*$/g, '')
+        .trim();
+    text = text.replace(/(\d{5})__ZIP__(\d{3})/g, '$1-$2');
+    let formatted = toTitleCase(text);
+    formatted = formatted
+        .replace(/\bQuadra(\d+)\b/g, 'Quadra $1')
+        .replace(/\bQuadra\s*(\d+)\s*(?:E|,|-|\/)\s*N?\s*(\d{1,3})(?!-)\b/gi, (_, q, n) => `Quadra ${q}, N ${q}-${n}`)
+        .replace(/\bQuadra\s*(\d+)\s+N\s*(\d{1,3})(?!-)\b/gi, (_, q, n) => `Quadra ${q}, N ${q}-${n}`)
+        .replace(/\bQuadra\s*(\d+)\s*,\s*N\s*(\d{1,3})(?!-)\b/gi, (_, q, n) => `Quadra ${q}, N ${q}-${n}`)
+        .replace(/\bQuadra\s*(\d+)\s*,\s*(\d{1,3})(?!-)\b/gi, (_, q, n) => `Quadra ${q}, N ${q}-${n}`)
+        .replace(/\bBr-(\d{2,3})\b/g, 'BR-$1')
+        .replace(/\bS\/n\b/g, 'S/N');
+    return formatted;
+};
+
+export const buildSanitizedAddress = ({ fullAddress, city, state, zip }) => {
+    const parts = [];
+    const sanitizedStreet = sanitizeAddressSegment(fullAddress);
+    const sanitizedCity = sanitizeAddressSegment(city);
+    const sanitizedState = normalizeStateCode(state);
+    const sanitizedZip = normalizeZipCode(zip);
+    const hasPartSegment = (needle) => {
+        const needleNorm = normalizeText(needle);
+        return parts.some((part) => normalizeText(part)
+            .split(',')
+            .map((segment) => segment.trim())
+            .includes(needleNorm));
+    };
+
+    if (sanitizedStreet) parts.push(sanitizedStreet);
+    if (sanitizedCity && !hasPartSegment(sanitizedCity)) parts.push(sanitizedCity);
+    if (sanitizedState && !hasPartSegment(sanitizedState)) parts.push(sanitizedState);
+    if (sanitizedZip && !parts.some((part) => part.includes(sanitizedZip))) parts.push(sanitizedZip);
+    if (!parts.some((part) => normalizeText(part) === 'brasil')) parts.push('Brasil');
+
+    return parts.join(', ').replace(/\s{2,}/g, ' ').replace(/^,\s*|\s*,\s*$/g, '').trim();
 };
 
 const isLikelyAddressText = (value) => {
@@ -160,7 +287,7 @@ const processData = (data) => {
         address: ['endereco', 'endereço', 'rua', 'address', 'logradouro', 'local', 'destino', 'destination address', 'destinationaddress', 'delivery address'],
         number: ['numero', 'número', 'n', 'num', 'nº'],
         city: ['cidade', 'city', 'municipio', 'município', 'loc'],
-        state: ['estado', 'uf', 'state', 'est'],
+        state: ['estado', 'uf', 'state'],
         zip: ['cep', 'zip', 'postal', 'cod_postal', 'zipcode', 'postal code'],
         lat: ['lat', 'latitude', 'y'],
         lon: ['lon', 'long', 'longitude', 'x'],
@@ -286,17 +413,21 @@ const processData = (data) => {
         const observation = observationKey ? String(safeRow[observationKey] ?? '').trim() : '';
 
         // Clean address construction
-        let lookupString = normalizeAddressNumberNotation(fullAddress);
-        if (city && !lookupString.toLowerCase().includes(city.toLowerCase())) lookupString += `, ${city}`;
-        if (state && !lookupString.toLowerCase().includes(state.toLowerCase())) lookupString += `, ${state}`;
-        if (zip && !lookupString.includes(zip)) lookupString += `, ${zip}`;
-        if (lookupString && !lookupString.toLowerCase().includes('brasil')) lookupString += ', Brasil';
+        const lookupString = buildSanitizedAddress({
+            fullAddress,
+            city,
+            state,
+            zip
+        });
+        const displayAddress = [sanitizeAddressSegment(fullAddress), sanitizeAddressSegment(city)]
+            .filter(Boolean)
+            .join(', ');
 
         return {
             id: `item-${index}-${Date.now()}`,
             label: name || `Entrega #${index + 1}`,
-            address: lookupString.trim(),
-            displayAddress: `${fullAddress}${city ? ', ' + city : ''}`.trim(),
+            address: lookupString,
+            displayAddress: displayAddress || sanitizeAddressSegment(fullAddress),
             coords: hasValidCoords ? { lat: latValue, lon: lonValue } : null,
             status: 'pending',
             priorityWeight,

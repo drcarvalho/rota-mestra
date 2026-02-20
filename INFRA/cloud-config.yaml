@@ -1,0 +1,36 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - qemu-guest-agent
+  - docker.io
+  - docker-compose
+  - curl
+  - git
+
+ssh_pwauth: true
+disable_root: true
+
+users:
+  - name: ubuntu
+    gecos: Ubuntu User
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    passwd: "$6$rounds=4096$vGhv7D6vS6$6g5Vf.S6gE/K1.nL.mR1Y9P.0nL.mR1Y9P.0nL.mR1Y9P.0nL.mR1Y9P.0" # Senha Ubuntu@2026 criptografada
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+chpasswd:
+  list: |
+    ubuntu:Ubuntu@2026
+  expire: False
+
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now docker
+  - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+  - sed -i 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication yes/g' /etc/ssh/sshd_config
+  - systemctl restart ssh
