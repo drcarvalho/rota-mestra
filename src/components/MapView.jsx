@@ -60,20 +60,20 @@ function EnsureMapResize({ isVisible }) {
     return null;
 }
 
-const TILE_PROVIDERS = [
+const LIGHT_TILE_PROVIDERS = [
+    {
+        key: 'carto-light',
+        name: 'Carto Light',
+        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd'
+    },
     {
         key: 'osm',
         name: 'OpenStreetMap',
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attribution: '&copy; OpenStreetMap',
         subdomains: 'abc'
-    },
-    {
-        key: 'carto',
-        name: 'Carto',
-        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        subdomains: 'abcd'
     },
     {
         key: 'esri',
@@ -83,10 +83,31 @@ const TILE_PROVIDERS = [
     }
 ];
 
-const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, deliveryCountMode = 'packages', isVisible = true }) => {
+const DARK_TILE_PROVIDERS = [
+    {
+        key: 'carto-dark',
+        name: 'Carto Dark Matter',
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd'
+    },
+    {
+        key: 'osm-dark',
+        name: 'OpenStreetMap Dark',
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; OpenStreetMap',
+        subdomains: 'abc'
+    }
+];
+
+const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, deliveryCountMode = 'packages', isVisible = true, isDarkMode = false }) => {
     const [providerIdx, setProviderIdx] = useState(0);
     const [hasLoadedTile, setHasLoadedTile] = useState(false);
     const tileErrorCountRef = useRef(0);
+
+    const providers = isDarkMode ? DARK_TILE_PROVIDERS : LIGHT_TILE_PROVIDERS;
+    const activeIdx = Math.min(providerIdx, providers.length - 1);
+    const provider = providers[activeIdx];
 
     const hasValidCoords = (item) =>
         Boolean(item?.coords && Number.isFinite(item.coords.lat) && Number.isFinite(item.coords.lon));
@@ -145,13 +166,12 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
         return routeGeometry.coordinates.map((c) => [c[1], c[0]]);
     }, [routeGeometry]);
 
-    const provider = TILE_PROVIDERS[providerIdx];
     const handleTileError = () => {
         tileErrorCountRef.current += 1;
         if (tileErrorCountRef.current < 8) return;
         tileErrorCountRef.current = 0;
         setHasLoadedTile(false);
-        setProviderIdx((idx) => Math.min(idx + 1, TILE_PROVIDERS.length - 1));
+        setProviderIdx((idx) => (idx + 1) % providers.length);
     };
 
     return (
@@ -340,7 +360,7 @@ const MapView = ({ items, routeGeometry, stopStatuses = {}, nextStopIndex = -1, 
                         onClick={() => {
                             setHasLoadedTile(false);
                             tileErrorCountRef.current = 0;
-                            setProviderIdx((idx) => (idx + 1) % TILE_PROVIDERS.length);
+                            setProviderIdx((idx) => (idx + 1) % providers.length);
                         }}
                     >
                         Trocar mapa

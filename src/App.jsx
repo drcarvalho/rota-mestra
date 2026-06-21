@@ -732,7 +732,10 @@ function App() {
         </div>
         <div className="header-kpis hide-mobile">
           <div className="header-pill">
-            <span className={`status-dot ${status === 'ready' ? 'status-dot-success' : ''}`} />
+            <span className={`status-dot ${
+              status === 'ready' ? 'status-dot-success' : 
+              (status === 'geocoding' || status === 'optimizing' || status === 'uploading') ? 'status-dot-processing' : ''
+            }`} />
             {headerStageLabel}
           </div>
           <div className="header-pill">
@@ -776,7 +779,7 @@ function App() {
       <main className="main-viewport">
         {/* SIDE PANEL (Panel view on mobile) */}
         <aside className={`side-panel ${isMobile && mobileView === 'map' ? 'hidden' : ''}`}>
-          <div className="bento-scroll">
+          <div className="panel-tabbar-wrapper">
             <div className="panel-tabbar">
               {PANEL_TABS.map((tab) => (
                 <button
@@ -790,6 +793,8 @@ function App() {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="bento-scroll">
             <>
               {activeTab === 'optimizer' && (
                 <div key="opt">
@@ -1152,7 +1157,7 @@ function App() {
         {/* MAP VIEWPORT */}
         <div className="map-viewport">
           <Suspense fallback={<div className="loading-spinner"></div>}>
-            <MapView items={items} routeGeometry={routeInfo?.geometry} stopStatuses={stopStatuses} nextStopIndex={currentIdx} deliveryCountMode={deliveryCountMode} isVisible={!(isMobile && mobileView === 'panel')} />
+            <MapView items={items} routeGeometry={routeInfo?.geometry} stopStatuses={stopStatuses} nextStopIndex={currentIdx} deliveryCountMode={deliveryCountMode} isVisible={!(isMobile && mobileView === 'panel')} isDarkMode={isDarkMode} />
           </Suspense>
 
           {/* Floating Mobile Map HUD */}
