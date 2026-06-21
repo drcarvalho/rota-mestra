@@ -228,6 +228,86 @@ const twoOptImprove = (baseRoute, matrix, roundTrip = false) => {
     return route;
 };
 
+const twoOptImproveWithConstraints = (baseRoute, costMatrix, durationMatrix, items, roundTrip, startIndex, profile) => {
+    const route = [...baseRoute];
+    const n = route.length;
+    if (n < 4) return route;
+
+    let currentScore = routeScoreWithConstraints(route, {
+        costMatrix,
+        durationMatrix,
+        items,
+        roundTrip,
+        startIndex,
+        profile
+    });
+
+    let maxPasses = 4;
+    if (n > 60) maxPasses = 1;
+    else if (n > 30) maxPasses = 2;
+
+    let improved = true;
+    let passes = 0;
+
+    while (improved && passes < maxPasses) {
+        improved = false;
+        passes++;
+
+        for (let i = 1; i < n - 2; i++) {
+            for (let k = i + 1; k < n - 1; k++) {
+                const candidate = [...route];
+                const reversed = candidate.slice(i, k + 1).reverse();
+                candidate.splice(i, reversed.length, ...reversed);
+
+                const candidateScore = routeScoreWithConstraints(candidate, {
+                    costMatrix,
+                    durationMatrix,
+                    items,
+                    roundTrip,
+                    startIndex,
+                    profile
+                });
+
+                if (candidateScore < currentScore - 1e-9) {
+                    for (let m = 0; m < candidate.length; m++) {
+                        route[m] = candidate[m];
+                    }
+                    currentScore = candidateScore;
+                    improved = true;
+                }
+            }
+        }
+
+        if (roundTrip) {
+            const lastIdx = n - 1;
+            for (let i = 1; i < n - 1; i++) {
+                const candidate = [...route];
+                const reversed = candidate.slice(i).reverse();
+                candidate.splice(i, reversed.length, ...reversed);
+
+                const candidateScore = routeScoreWithConstraints(candidate, {
+                    costMatrix,
+                    durationMatrix,
+                    items,
+                    roundTrip,
+                    startIndex,
+                    profile
+                });
+
+                if (candidateScore < currentScore - 1e-9) {
+                    for (let m = 0; m < candidate.length; m++) {
+                        route[m] = candidate[m];
+                    }
+                    currentScore = candidateScore;
+                    improved = true;
+                }
+            }
+        }
+    }
+
+    return route;
+};
+
 const heldKarp = (matrix, startIndex, roundTrip = false) => {
     const n = matrix.length;
     const size = 1 << n;
@@ -299,7 +379,7 @@ const getBestSequence = (items, startIndex, roundTrip) => {
     const n = items.length;
 
     // Exact solver for smaller inputs, robust and truly minimal.
-    if (n <= 12) {
+    if (n <= 14) {
         return heldKarp(matrix, startIndex, roundTrip);
     }
 
@@ -352,8 +432,8 @@ export const optimizeRoute = async (items, options = { roundTrip: false, startIn
     const candidates = [];
 
     // Exact best route on real road costs for smaller inputs.
-    // With <=11 points, this is still practical and guarantees optimality.
-    if (items.length <= 11 && !advancedConstraints && roadTable) {
+    // With <=14 points, this is still practical and guarantees optimality.
+    if (items.length <= 14 && !advancedConstraints && roadTable) {
         const exactRoad = await getExactRoadOptimized(items, startIdx, options.roundTrip, optimizeBy, roadTable);
         if (exactRoad) {
             candidates.push(attachBaseline(exactRoad));
@@ -448,10 +528,14 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
     const firstHopVariants = Math.min(12, n - 1);
     let bestIndexRoute = null;
     let bestScore = Infinity;
+    const advancedConstraints = hasAdvancedConstraints(items);
 
     for (let variant = 0; variant < firstHopVariants; variant++) {
         const seed = nearestNeighborRoute(costMatrix, startIndex, variant);
-        const improved = twoOptImprove(seed, costMatrix, roundTrip);
+        const improved = advancedConstraints
+            ? twoOptImproveWithConstraints(seed, costMatrix, durationMatrix, items, roundTrip, startIndex, routeProfile)
+            : twoOptImprove(seed, costMatrix, roundTrip);
+
         const score = routeScoreWithConstraints(improved, {
             costMatrix,
             durationMatrix,
@@ -469,9 +553,13 @@ const getRoadHeuristicOptimized = async (items, startIndex, roundTrip = false, o
 
     // Randomized perturbation passes over current best route to escape local minima.
     if (bestIndexRoute) {
-        for (let i = 0; i < 16; i++) {
+        const perturbationPasses = advancedConstraints ? 24 : 40;
+        for (let i = 0; i < perturbationPasses; i++) {
             const perturbed = randomRoutePerturbation(bestIndexRoute);
-            const improved = twoOptImprove(perturbed, costMatrix, roundTrip);
+            const improved = advancedConstraints
+                ? twoOptImproveWithConstraints(perturbed, costMatrix, durationMatrix, items, roundTrip, startIndex, routeProfile)
+                : twoOptImprove(perturbed, costMatrix, roundTrip);
+
             const score = routeScoreWithConstraints(improved, {
                 costMatrix,
                 durationMatrix,
@@ -530,32 +618,89 @@ const getClusterHybridOptimized = async (items, startIndex, roundTrip = false) =
     const nonStart = items.map((item, idx) => ({ item, idx })).filter(({ idx }) => idx !== startIndex);
     if (nonStart.length === 0) return null;
 
-    const precision = items.length > 60 ? 2 : 3;
-    const clusterMap = new Map();
-    nonStart.forEach(({ item, idx }) => {
-        const key = `${item.coords.lat.toFixed(precision)}:${item.coords.lon.toFixed(precision)}`;
-        const existing = clusterMap.get(key);
-        if (existing) {
-            existing.push({ item, idx });
-            return;
+    // Determine optimal number of clusters K (e.g. groups of ~5-6 deliveries)
+    const k = Math.max(2, Math.ceil(nonStart.length / 5));
+
+    // K-Means clustering algorithm for geographic grouping
+    let centroids = [];
+    const nNonStart = nonStart.length;
+    const initialIndices = new Set();
+    while (centroids.length < Math.min(k, nNonStart)) {
+        const randIdx = Math.floor(Math.random() * nNonStart);
+        if (!initialIndices.has(randIdx)) {
+            initialIndices.add(randIdx);
+            centroids.push({ ...nonStart[randIdx].item.coords });
         }
-        clusterMap.set(key, [{ item, idx }]);
-    });
-    const clusters = Array.from(clusterMap.values());
-    const clusterCentroids = clusters.map((cluster) => {
+    }
+
+    let assignments = new Array(nNonStart).fill(-1);
+    let changed = true;
+    let maxIterations = 30;
+
+    while (changed && maxIterations > 0) {
+        changed = false;
+        maxIterations--;
+
+        for (let i = 0; i < nNonStart; i++) {
+            const p = nonStart[i].item.coords;
+            let bestIdx = -1;
+            let bestDist = Infinity;
+            for (let j = 0; j < centroids.length; j++) {
+                const d = getDistance(p, centroids[j]);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestIdx = j;
+                }
+            }
+            if (assignments[i] !== bestIdx) {
+                assignments[i] = bestIdx;
+                changed = true;
+            }
+        }
+
+        const sums = Array.from({ length: centroids.length }, () => ({ lat: 0, lon: 0, count: 0 }));
+        for (let i = 0; i < nNonStart; i++) {
+            const cIdx = assignments[i];
+            if (cIdx >= 0) {
+                sums[cIdx].lat += nonStart[i].item.coords.lat;
+                sums[cIdx].lon += nonStart[i].item.coords.lon;
+                sums[cIdx].count++;
+            }
+        }
+
+        for (let j = 0; j < centroids.length; j++) {
+            if (sums[j].count > 0) {
+                centroids[j] = {
+                    lat: sums[j].lat / sums[j].count,
+                    lon: sums[j].lon / sums[j].count
+                };
+            }
+        }
+    }
+
+    const clusters = Array.from({ length: centroids.length }, () => []);
+    for (let i = 0; i < nNonStart; i++) {
+        const cIdx = assignments[i];
+        if (cIdx >= 0) {
+            clusters[cIdx].push(nonStart[i]);
+        }
+    }
+
+    const activeClusters = clusters.filter(c => c.length > 0);
+    const activeCentroids = activeClusters.map(cluster => {
         const lat = cluster.reduce((acc, entry) => acc + entry.item.coords.lat, 0) / cluster.length;
         const lon = cluster.reduce((acc, entry) => acc + entry.item.coords.lon, 0) / cluster.length;
         return { lat, lon };
     });
 
-    const remainingClusterIdx = new Set(clusters.map((_, idx) => idx));
+    const remainingClusterIdx = new Set(activeClusters.map((_, idx) => idx));
     let currentPoint = startItem.coords;
     const clusterVisitOrder = [];
     while (remainingClusterIdx.size > 0) {
         let best = null;
         let bestDist = Infinity;
         remainingClusterIdx.forEach((clusterIdx) => {
-            const d = getDistance(currentPoint, clusterCentroids[clusterIdx]);
+            const d = getDistance(currentPoint, activeCentroids[clusterIdx]);
             if (d < bestDist) {
                 bestDist = d;
                 best = clusterIdx;
@@ -563,13 +708,13 @@ const getClusterHybridOptimized = async (items, startIndex, roundTrip = false) =
         });
         clusterVisitOrder.push(best);
         remainingClusterIdx.delete(best);
-        currentPoint = clusterCentroids[best];
+        currentPoint = activeCentroids[best];
     }
 
     const orderedIndices = [startIndex];
     let currentIdx = startIndex;
     clusterVisitOrder.forEach((clusterIdx) => {
-        const unvisited = [...clusters[clusterIdx]];
+        const unvisited = [...activeClusters[clusterIdx]];
         while (unvisited.length > 0) {
             let bestPos = -1;
             let bestDist = Infinity;
@@ -596,7 +741,7 @@ const getClusterHybridOptimized = async (items, startIndex, roundTrip = false) =
         distance: pathData.distance,
         duration: pathData.duration,
         meta: {
-            solver: 'cluster-hybrid',
+            solver: 'cluster-hybrid-kmeans',
             exact: false
         }
     };
